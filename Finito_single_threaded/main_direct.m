@@ -1,21 +1,23 @@
 Initialize;
 
 
-p = zeros(n, dim); 
+grad = zeros(n, dim); 
 
 for i = 1:n
-    p(i, :) = grad_fi(phi(i,:), x(i,:), y(i),s)- alpha * s * phi(i,:);
+    grad(i, :) = grad_fi(phi(i,:), x(i,:), y(i),s);
 end
 
+mean_phi = mean(phi, 1);
 
 %% Uniformly random sampling
 tic
 for k = 1: n * epoch
     
-        w = -1/(alpha * s * n) * sum(p, 1);
+        w = mean_phi - 1/(alpha * s * n) * sum(grad, 1);
         j = randi(n);
+        mean_phi = mean_phi + 1/n * (w - phi(j,:));
         phi(j,:) = w;
-        p(j,:) = grad_fi(phi(j,:), x(j,:), y(j),s) - alpha * s * phi(i,:);
+        grad(j,:) = grad_fi(phi(j,:), x(j,:), y(j),s);
         
         
         if rem(k, 1000) == 1
