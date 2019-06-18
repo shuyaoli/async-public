@@ -7,14 +7,14 @@
 using namespace std;
 
 double sig (double x) {
-    return 1/(1 + exp(-x));
+  return 1/(1 + exp(-x));
 }
 
 double dot (double* x, double* y, int dim) {
-    double result = 0;
-    for (int i = 0; i < dim; i++) 
-        result += x[i] * y[i];
-    return result;
+  double result = 0;
+  for (int i = 0; i < dim; i++) 
+    result += x[i] * y[i];
+  return result;
 }
 
 double* vector_sum (double* x, double *y, int dim) {
@@ -119,9 +119,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
   srand(1);
   for (int k = 0; k < n * epoch; k++) {
-    
+    // Pick j
     int j = rand() % n;
-    
+
+    //
     double* mean_grad = mean_rowvectors(grad_v, n, dim);
     double* term2 = scalar_vector_product(-1.0/alpha/s, mean_grad, dim);
     double* w = vector_sum(mean_phi, term2, dim);
