@@ -10,6 +10,7 @@ double sig (double x) {
   return 1/(1 + exp(-x));
 }
 
+
 double dot (double* x, double* y, int dim) {
   double result = 0;
   for (int i = 0; i < dim; i++) 
@@ -17,23 +18,23 @@ double dot (double* x, double* y, int dim) {
   return result;
 }
 
-double* vector_sum (double* x, double *y, int dim) {
+// double* vector_sum (double* x, double *y, int dim) {
     
-  double* result = new double[dim];
-  for (int i = 0; i < dim; i++)
-    result[i] = x[i] + y[i];
-  return result;
-}
+//   double* result = new double[dim];
+//   for (int i = 0; i < dim; i++)
+//     result[i] = x[i] + y[i];
+//   return result;
+// }
 
-double* vector_difference(double* x, double *y, int dim) {
+// double* vector_difference(double* x, double *y, int dim) {
     
-  double* result = new double[dim];
-  for (int i = 0; i < dim; i++)
-    result[i] = x[i] - y[i];
-  return result;
-}
+//   double* result = new double[dim];
+//   for (int i = 0; i < dim; i++)
+//     result[i] = x[i] - y[i];
+//   return result;
+// }
 
-void* vector_increment(double* x, double* incr, int dim){
+void vector_increment(double* x, double* incr, int dim){
   for (int i = 0; i < dim; i++)
     x[i] += incr[i];
 }
@@ -86,12 +87,12 @@ double* mean_rowvectors(double** x, int num_row, int num_col) {
   return result;
 }
 
-double* scalar_vector_product (double c, double* v, int dim) {
-  double* result = new double[dim];
-  for (int i = 0; i < dim; i++)
-    result[i] = c * v[i];
-  return result;
-}
+// double* scalar_vector_product (double c, double* v, int dim) {
+//   double* result = new double[dim];
+//   for (int i = 0; i < dim; i++)
+//     result[i] = c * v[i];
+//   return result;
+// }
 
 void delete_double_ptr (double **x, int M) {
   for (int i = 0; i < M; i++)
@@ -139,8 +140,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     // TODO: signal that read is done
 
     
-    //i update
-    double* w = new double[dim];
+    // Calculation
+    double* w = new double[dim]; 
     for (int i = 0; i < dim; i++) 
       w[i] = mean_phi[i] - 1.0 / alpha / s * mean_grad[i];
 
@@ -154,17 +155,17 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     for (int i = 0; i < dim; i++)
       incr_grad[i] = 1.0/n * (this_grad[i] - grad_v[j][i]);
     
-    
-    //mean update
-    vector_increment(mean_phi, incr_phi, dim);
-    vector_increment(mean_grad, incr_grad, dim);
-    delete[] incr_phi;
-    delete[] incr_grad;
-
+    // j update
     delete[] phi_v[j];
     delete[] grad_v[j];
     phi_v[j] = w;
     grad_v[j] = this_grad;
+    
+    // mean update
+    vector_increment(mean_phi, incr_phi, dim);
+    vector_increment(mean_grad, incr_grad, dim);
+    delete[] incr_phi;
+    delete[] incr_grad;
   }
   
   // Output 
@@ -173,7 +174,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   double * ptr = mxGetPr(plhs[0]);
   
   for (int c = 0; c < dim; c++)
-    ptr[c] = /**/ mean_phi /**/ [c]; //It suffices to change this line to change output
+    ptr[c] = mean_phi[c]; 
 
 
 
