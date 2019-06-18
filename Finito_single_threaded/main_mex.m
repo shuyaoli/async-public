@@ -11,5 +11,5 @@ db_trained = mean(phi, 1)
 result = x * db_trained' > 0;
 result = 2 * result - 1;
 
-error_rate = 1 - sum(result == y) / size(result,1)
-f(mean(phi, 1)', x, y, s)
+error_rate = 1 - sum(result == y) / size(result,1);
+fprintf('%.10f\n',f(mean(phi, 1)', x, y, s));

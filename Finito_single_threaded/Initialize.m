@@ -5,10 +5,10 @@ rng(seed);
 n = 5000; 
 dim = 3; 
 err = 0.01; 
-initializer_prefactor = 0; 
+% initializer_prefactor = 0; 
 
 alpha = 2;   % training, toMEX
-epoch = 100; % training, toMEX
+epoch = 50; % training, toMEX
 
 s = 1; % function to be optimized, toMEX
 
@@ -16,9 +16,11 @@ s = 1; % function to be optimized, toMEX
 % x = 0.1 .* x;
 % x y toMEX
 
-seed = 'shuffle';
+seed = 0;
 rng(seed);
-phi = initializer_prefactor * 2 * (rand(n, dim) - 0.5); % n by dim, toMEX
+phi = zeros(n,dim);
+
+% phi = initializer_prefactor * 2 * (rand(n, dim) - 0.5); % n by dim, toMEX
 
 % phi_bar : mean(phi, 1)
 % phi_i = phi(i, :)
