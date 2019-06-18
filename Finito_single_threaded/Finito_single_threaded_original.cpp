@@ -121,50 +121,36 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     grad_v[r] = grad_fi(phi_v[r], x_v[r], y[r], s, dim);
   
   double* mean_phi = mean_rowvectors(phi_v, n, dim); 
-  double* mean_grad = mean_rowvectors(grad_v, n, dim);
-  
+    
   srand(1);
   for (int k = 0; k < n * epoch; k++) {
     // Pick j
     int j = rand() % n;
 
     // Read mean_phi
-    double* this_mean_phi = new double [dim];
-    double* this_mean_grad= new double [dim];
-    for (int i = 0; i < dim; i++) {
-      this_mean_phi[i] = mean_phi[i];
-      this_mean_grad[i]= mean_grad[i];
-    }
-    
-    // TODO: signal that read is done
+
 
     
     //i update
-    double* w = new double[dim];
-    for (int i = 0; i < dim; i++) 
-      w[i] = mean_phi[i] - 1.0 / alpha / s * mean_grad[i];
-
-    double *this_grad = grad_fi(phi_v[j], x_v[j], y[j], s, dim);
-    
-    double* incr_phi = new double[dim];
-    for (int i = 0; i < dim; i++)
-      incr_phi[i] = 1.0/n * (w[i] - phi_v[j][i]);
-
-    double* incr_grad = new double[dim];
-    for (int i = 0; i < dim; i++)
-      incr_grad[i] = 1.0/n * (this_grad[i] - grad_v[j][i]);
-    
+    double* mean_grad = mean_rowvectors(grad_v, n, dim); 
+    double* term2 = scalar_vector_product(-1.0/alpha/s, mean_grad, dim);
+    double* w = vector_sum(mean_phi, term2, dim); 
+    delete[] term2;
     
     //mean update
-    vector_increment(mean_phi, incr_phi, dim);
-    vector_increment(mean_grad, incr_grad, dim);
-    delete[] incr_phi;
-    delete[] incr_grad;
+    double* dif = vector_difference(w, phi_v[j], dim);
+    double* incr = scalar_vector_product(1.0/n, dif, dim);
+    delete[] dif;
+
+    vector_increment(mean_phi, incr, dim);
+    delete[] incr;
 
     delete[] phi_v[j];
-    delete[] grad_v[j];
     phi_v[j] = w;
-    grad_v[j] = this_grad;
+    grad_v[j] = grad_fi(phi_v[j], x_v[j], y[j], s, dim);
+
+    
+    delete[] mean_grad;
   }
   
   // Output 
@@ -180,8 +166,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
  
   
   delete[] mean_phi;
-  delete[] mean_grad;
-  
   delete_double_ptr(x_v,n);
   delete_double_ptr(phi_v,n);
   delete_double_ptr(grad_v,n);

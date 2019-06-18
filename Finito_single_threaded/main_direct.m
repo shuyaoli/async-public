@@ -20,18 +20,18 @@ for k = 1: n * epoch
         grad(j,:) = grad_fi(phi(j,:), x(j,:), y(j),s);
         
         
-%         if rem(k, 1000) == 1
-% 
-%             db_trained = mean(phi, 1); 
-% 
-%             result = x * db_trained' > 0;
-%             result = 2 * result - 1;
-% 
-%             error_rate = 1 - sum(result == y) / size(result,1);
-% 
-%         
-%             fprintf('Itr: %d. Error: %f. Cost function: %.10f.\n', k, error_rate, (f(mean(phi, 1)', x, y, s)));
-%         end
+        if rem(k, 1000) == 1
+
+            db_trained = mean(phi, 1); 
+
+            result = x * db_trained' > 0;
+            result = 2 * result - 1;
+
+            error_rate = 1 - sum(result == y) / size(result,1);
+
+        
+            fprintf('Itr: %d. Error: %f. Cost function: %.10f.\n', k, error_rate, (f(mean(phi, 1)', x, y, s)));
+        end
 end
 toc
 %% Uniform random shuffle without replacement
