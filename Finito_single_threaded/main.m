@@ -33,7 +33,7 @@ for k = 1: n * epoch
         end
 end
 toc
-%% Uniform random shuffle without replacement
+%% No longer updated and maintaned - Uniform random shuffle without replacement
 % tic
 % for k = 1: epoch
 % 
