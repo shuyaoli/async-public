@@ -114,24 +114,26 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   mutex sequential_mutex;
   mutex sync_mutex;
   mutex read_mutex;
+  mutex print_mutex;
+  mutex itr_mutex;
+  // mutex print_mutex;
+  
   mutex* block_mutexes = new mutex[n];
 
   int thread_counter_sync = num_thread;
   int thread_counter_read = num_thread;
 
-  auto safe_decrease_read = [&read_mutex](int& n) {
-    lock_guard <mutex> lck(read_mutex);
+  auto safe_decrease = [](int& n, mutex& mtx) {
+    lock_guard <mutex> lck(mtx);
     n -= 1;
   };
 
-  auto safe_decrease_sync = [&sync_mutex](int &n) {
-    lock_guard <mutex> lck(sync_mutex);
-    n -= 1;
-  };
-  
+
+
   auto iterate = [&]() {
     
     while (num_itr > 0) {
+      print_mutex.lock();cout << this_thread::get_id() << " starts at itr "<< num_itr << endl;print_mutex.unlock();
       int ik = rand() % n;
       // mexPrintf("%d\n, ", ik);
 
@@ -141,8 +143,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       for (int i = 0; i < dim; i++) {
 	old_mean_z[i] = mean_z[i];
       }
-      safe_decrease_read(thread_counter_read);
-      cout << "Itr: "<< num_itr << ", thread: " << this_thread::get_id() <<endl;
+      safe_decrease(thread_counter_read, read_mutex);
+      print_mutex.lock();cout << this_thread::get_id() << " finished reading mean at itr " << num_itr << endl;print_mutex.unlock();
+
       // TODO: signal that read is done
    
       // Calculation
@@ -157,25 +160,36 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       for (int c = 0; c < dim; c++)
 	incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
       
-      while (thread_counter_read > 0) {};
-      // mean_z update
-      vector_increment(mean_z, incr_z, dim);
+      // while (thread_counter_read > 0);
+	// cout << this_thread::get_id()<< " wait for writing mean. Itr: "<< num_itr << endl;
 
-      safe_decrease_sync(thread_counter_sync);
-      while (thread_counter_sync);
+
       
-      lock_guard <mutex> lck(sequential_mutex);
-      // z_ik update
+      safe_decrease(thread_counter_sync, sync_mutex);
+
+      print_mutex.lock();cout << this_thread::get_id() << " ready to sync at itr " << num_itr << endl;print_mutex.unlock();
+      
+      while (thread_counter_sync);
+	// cout << this_thread::get_id() <<  " wait for sync. Itr: "<< num_itr << endl;
+
+      print_mutex.lock();cout << this_thread::get_id() << " finished sync at itr " << num_itr << endl;print_mutex.unlock();
+      
+      sequential_mutex.lock();
+      print_mutex.lock();cout << this_thread::get_id() << " enters sequential " << num_itr << endl;print_mutex.unlock();
+      // mean_z update
+      vector_increment(mean_z, incr_z, dim);      // z_ik update
+      
       delete[] z_v[ik];
       z_v[ik] = old_mean_z;
 
       delete[] incr_z;
       delete[] grad_ik;
-      num_itr -= 1;
+      safe_decrease(num_itr, itr_mutex);
 
-      // Here is a bug: You can't update counter before ALL thread finishes
+
       thread_counter_read = num_thread;
       thread_counter_sync = num_thread;
+      sequential_mutex.unlock();
     }
 
   };

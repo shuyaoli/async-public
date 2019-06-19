@@ -7,6 +7,9 @@
 #include <mutex>
 #include <time.h>
 #include <future>
+#include <condition_variable>
+#include <atomic>
+#include <chrono>
 
 using namespace std;
 
@@ -105,73 +108,89 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   }
   
   delete[] zeros;
+
+  auto safe_decrease = [](int& n, mutex& mtx) {
+    lock_guard <mutex> lck(mtx);
+    n -= 1;
+  };
+
+  auto safe_increase = [](int& n, mutex& mtx) {
+    lock_guard <mutex> lck(mtx);
+    n += 1;
+  };
   
   double* mean_z =  mean_rowvectors(z_v, n, dim);
 
   int num_thread = 2;
   int num_itr = epoch * n;
   
+  int thread_counter_sync = 0;
+  int thread_counter_read = 0;
+  
   mutex sequential_mutex;
-  mutex sync_mutex;
   mutex read_mutex;
-  mutex* block_mutexes = new mutex[n];
-
-  int thread_counter_sync = num_thread;
-  int thread_counter_read = num_thread;
-
-  auto safe_decrease_read = [&read_mutex](int& n) {
-    lock_guard <mutex> lck(read_mutex);
-    n -= 1;
-  };
-
-  auto safe_decrease_sync = [&sync_mutex](int &n) {
-    lock_guard <mutex> lck(sync_mutex);
-    n -= 1;
-  };
+  mutex print_mutex;
+  mutex itr_mutex;
+  mutex mean_z_mutex;
+  mutex sync_mutex;
+  
+  condition_variable sync_cv;
   
   auto iterate = [&]() {
-
+    
     while (num_itr > 0) {
-      int ik = rand() % n;
-      // mexPrintf("%d\n, ", ik);
+
+      int ik = rand() % n; // mexPrintf("%d\n, ", ik); //TODO: make sure randomness
 
       // Read mean_z
       double* old_mean_z = new double [dim];
-
       for (int i = 0; i < dim; i++) {
 	old_mean_z[i] = mean_z[i];
       }
-      safe_decrease_read(thread_counter_read);
-      
-      // TODO: signal that read is done
+      // Read is done
    
       // Calculation
       double *grad_ik = grad_fi(old_mean_z, x_v[ik], y[ik], s, dim);
       
       for (int c =  0; c < dim; c++) {
 	old_mean_z[c] -= 1.0/ alpha/ s * grad_ik[c];
-      }
-      // Now old_mean_z becomes new_z_ik
-    
+      }  // Now old_mean_z becomes new_z_ik
+      delete[] grad_ik;
+      
       double* incr_z = new double[dim];
       for (int c = 0; c < dim; c++)
 	incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
-      
-      while (thread_counter_read > 0) {cout << num_itr <<endl; }
-      // mean_z update
-      vector_increment(mean_z, incr_z, dim);
 
-      
-      lock_guard <mutex> lck(sequential_mutex);
-      // z_ik update
+      mean_z_mutex.lock();
+      vector_increment(mean_z, incr_z, dim);       // mean_z update
+      delete[] incr_z;
+      mean_z_mutex.unlock();
+
+      // z_ik update sequentially
+      sequential_mutex.lock();
       delete[] z_v[ik];
       z_v[ik] = old_mean_z;
+      sequential_mutex.unlock();
+      
+      safe_decrease(num_itr, itr_mutex);
 
-      delete[] incr_z;
-      delete[] grad_ik;
-      num_itr -= 1;
-      thread_counter_read = num_thread;
-      thread_counter_sync = num_thread;
+      //TODO: Synchronize
+      safe_increase(thread_counter_sync, sync_mutex);
+      // notifying thread
+      if (num_thread == thread_counter_sync) {
+	print_mutex.lock();cout << this_thread::get_id() << " notify to wake up\n";print_mutex.unlock();
+	lock_guard <mutex> lck(sync_mutex);
+	thread_counter_sync = 0;
+	sync_cv.notify_all();
+      }
+      // waiting thread
+      else {
+	print_mutex.lock();cout << this_thread::get_id() << " put to sleep\n";print_mutex.unlock();
+	unique_lock <mutex> lck(sync_mutex);
+	sync_cv.wait_for(lck, chrono::seconds(10), [thread_counter_sync](){
+	    return thread_counter_sync==0;});
+      }
+      //call_once to set the signal back
     }
 
   };

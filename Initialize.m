@@ -8,7 +8,7 @@ err = 0.01;
 % initializer_prefactor = 0; 
 
 alpha = 2;   % training, toMEX
-epoch = 200; % training, toMEX
+epoch = 100; % training, toMEX
 
 s = 1; % function to be optimized, toMEX
 
