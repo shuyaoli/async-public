@@ -1,0 +1,101 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <cstdlib>
+#include <mex.h>
+#include <thread>
+#include <mutex>
+#include <time.h>
+#include <future>
+#include <condition_variable>
+#include <atomic>
+#include <chrono>
+
+using namespace std;
+
+int main () {
+  int num_thread = 2;
+  int num_itr = epoch * n;
+  
+  int thread_counter_sync = 0;
+  int thread_counter_read = 0;
+  
+  mutex sequential_mutex;
+  mutex read_mutex;
+  mutex print_mutex;
+  mutex itr_mutex;
+  mutex mean_z_mutex;
+  mutex sync_mutex;
+  
+  condition_variable sync_cv;
+  
+  auto iterate = [&]() {
+    
+    while (num_itr > 0) {
+
+      int ik = rand() % n; // mexPrintf("%d\n, ", ik); //TODO: make sure randomness
+
+      // Read mean_z
+      double* old_mean_z = new double [dim];
+      for (int i = 0; i < dim; i++) {
+	old_mean_z[i] = mean_z[i];
+      }
+      // Read is done
+   
+      // Calculation
+      double *grad_ik = grad_fi(old_mean_z, x_v[ik], y[ik], s, dim);
+      
+      for (int c =  0; c < dim; c++) {
+	old_mean_z[c] -= 1.0/ alpha/ s * grad_ik[c];
+      }  // Now old_mean_z becomes new_z_ik
+      delete[] grad_ik;
+      
+      double* incr_z = new double[dim];
+      for (int c = 0; c < dim; c++)
+	incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
+
+      mean_z_mutex.lock();
+      vector_increment(mean_z, incr_z, dim);       // mean_z update
+      delete[] incr_z;
+      mean_z_mutex.unlock();
+
+      // z_ik update sequentially
+      sequential_mutex.lock();
+      delete[] z_v[ik];
+      z_v[ik] = old_mean_z;
+      sequential_mutex.unlock();
+      
+      safe_decrease(num_itr, itr_mutex);
+
+      //TODO: Synchronize
+      safe_increase(thread_counter_sync, sync_mutex);
+      // notifying thread
+      if (num_thread == thread_counter_sync) {
+	print_mutex.lock();cout << this_thread::get_id() << " notify to wake up\n";print_mutex.unlock();
+	lock_guard <mutex> lck(sync_mutex);
+	thread_counter_sync = 0;
+	sync_cv.notify_all();
+      }
+      // waiting thread
+      else {
+	print_mutex.lock();cout << this_thread::get_id() << " put to sleep\n";print_mutex.unlock();
+	unique_lock <mutex> lck(sync_mutex);
+	sync_cv.wait_for(lck, chrono::seconds(10), [thread_counter_sync](){
+	    return thread_counter_sync==0;});
+      }
+      //call_once to set the signal back
+    }
+
+  };
+  srand(1);
+
+  vector <thread> threads;
+
+  for (int i = 0; i < num_thread; i++) {
+    threads.push_back(thread(iterate));
+  }
+
+  for (auto& t: threads) t.join();
+
+  return 0;
+}
