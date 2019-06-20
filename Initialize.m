@@ -1,14 +1,14 @@
 clear;
-seed = 1;
+seed = 2;
 rng(seed);
 
-n = 5000; 
+n = 1000; 
 dim = 3; 
 err = 0.01; 
 % initializer_prefactor = 0; 
 
 alpha = 2;   % training, toMEX
-epoch = 100; % training, toMEX
+epoch = 500; % training, toMEX
 
 s = 1; % function to be optimized, toMEX
 

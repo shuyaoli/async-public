@@ -124,24 +124,25 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
     // Calculation
     double *grad_ik = grad_fi(old_mean_z, x_v[ik], y[ik], s, dim);
-    double *new_z_ik = grad_ik; // grad_ik is now hanging, do NOT delete it
+
     for (int c =  0; c < dim; c++) {
-      new_z_ik[c] = old_mean_z[c] - 1.0/ alpha/ s * grad_ik[c];
-    }
+      old_mean_z[c] -= 1.0/ alpha/ s * grad_ik[c];
+    } // Now old_mean_z becomes new_z_ik
+    delete[] grad_ik;
     
     double* incr_z = new double[dim];
     for (int c = 0; c < dim; c++)
-      incr_z[c] = 1.0/n * (new_z_ik[c] - z_v[ik][c]);
+      incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
 
     // z_ik update
     delete[] z_v[ik];
-    z_v[ik] = new_z_ik;
+    z_v[ik] =  old_mean_z;
     
     // mean_z update
     vector_increment(mean_z, incr_z, dim);
     delete[] incr_z;
 
-    delete[] old_mean_z;
+
   }
   
   // Output 

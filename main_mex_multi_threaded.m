@@ -2,7 +2,7 @@ Initialize;
 
 tic
 
-db_trained = Finito_multi_threaded(x, y, alpha, s, epoch)
+db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, 3);
 
 toc
 
@@ -11,4 +11,4 @@ result = x * db_trained' > 0;
 result = 2 * result - 1;
 
 error_rate = 1 - sum(result == y) / size(result,1);
-fprintf('The cost is %.10f\n',f(db_trained', x, y, s));
+fprintf('The cost is %.20f\n',f(db_trained', x, y, s));
