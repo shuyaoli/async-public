@@ -142,7 +142,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     vector_increment(mean_z, incr_z, dim);
     delete[] incr_z;
 
-
+    delete[] old_mean_z;
   }
   
   // Output 

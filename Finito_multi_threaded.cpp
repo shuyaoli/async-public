@@ -155,8 +155,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // Read mean_z
       double* old_mean_z = new double [dim]; // TODO: allocate once for each thread
-      for (int i = 0; i < dim; i++) {
-	old_mean_z[i] = mean_z[i];
+      double* old_z_ik = new double [dim];
+      
+      for (int c = 0; c < dim; c++) {
+	old_mean_z[c] = mean_z[c];
+	old_z_ik[c] = z_v[ik][c];
+	z_v[ik][c] = mean_z[c];
       }
       
       read_ctr++;
@@ -167,38 +171,40 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
       
       for (int c =  0; c < dim; c++) {
-	grad_ik[c] = - 1.0/ alpha/ s * grad_ik[c];
-      }  // Now grad_ik[c] becomes new_z_ik_incr
+	grad_ik[c] *= - 1.0/ alpha/ s;
+      }  // Now grad_ik[c] becomes incr_z_ik
 
       
-      double* incr_z = new double[dim];
+      double* incr_mean_z = new double[dim];
       for (int c = 0; c < dim; c++)
-	incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
+	incr_mean_z[c] = 1.0/n * (old_mean_z[c] + grad_ik[c]- old_z_ik[c]);
 
-      while (read_ctr < num_thread) {} //busy while loop 
+
+
+      
       //------------------------------------------------------------------------------
-      //SYNCHRONIZATION
+      // SYNCHRONIZATION
+      while (read_ctr < num_thread) {} //busy while loop
       //------------------------------------------------------------------------------
+      // z_ik update with block_lock
+
+      {
+	lock_guard <mutex> lck(block_mutex[ik]);
+	vector_increment(z_v[ik], grad_ik, dim);
+      }
       
       {
 	lock_guard <mutex> lck(mean_z_mutex);
 	//mean_z += incr_z
 	//what if += is atomic? Then we don't have to lock (mutex)
 	//you can achieve atomic += with "compare-and-swap" or "compare-and-exchange"
-	vector_increment(mean_z, incr_z, dim);       // mean_z update
-	delete[] incr_z;
-      }
-      
-      
+	vector_increment(mean_z, incr_mean_z, dim);       // mean_z update
+	delete[] incr_mean_z;
+      }  
+      // delete[] z_v[ik];
+      // z_v[ik] = old_mean_z;   // TODO: a bug here - you should substract twice!
 
-      // z_ik update with block_lock
-      {
-	lock_guard <mutex> lck(block_mutex[ik]);
-	vector_increment(old_mean_z, grad_ik, dim);
-	delete[] z_v[ik];
-	z_v[ik] = old_mean_z;   // TODO: a bug here - you should substract twice!
-      }
-      
+    
       
       itr_ctr--;
       //------------------------------------------------------------------------------

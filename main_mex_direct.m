@@ -11,4 +11,4 @@ result = x * db_trained' > 0;
 result = 2 * result - 1;
 
 error_rate = 1 - sum(result == y) / size(result,1);
-fprintf('%.10f\n',f(db_trained', x, y, s));
+fprintf('%.15f\n',f(db_trained', x, y, s));
