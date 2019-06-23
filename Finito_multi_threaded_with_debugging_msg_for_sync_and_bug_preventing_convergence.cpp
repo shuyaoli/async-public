@@ -122,24 +122,24 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   double* mean_z =  mean_rowvectors(z_v, n, dim);
 
-  // atomic_int sync_ctr(0), restart_ctr(0); // For synchronization
-
+  atomic_int sync_ctr(0), restart_ctr(0); // For synchronization
   atomic_int itr_ctr(epoch * n); // Tracking iteration
-  // atomic_int read_ctr(0);  // Make sure write is done after read
-  
+  atomic_int read_ctr(0);  // Make sure write is done after read
+  bool* repeated_index = new bool [n] ();
   // mutex sequential_mutex;
   // mutex read_mutex;
-  // mutex print_mutex;
-  // mutex mean_z_mutex;
-  // mutex sync_mutex;
-  // mutex* block_mutex = new mutex [n];
+  mutex print_mutex;
+  mutex mean_z_mutex;
+  
+  mutex sync_mutex;
+  mutex* block_mutex = new mutex [n];
     
-  // condition_variable sync_cv;
+  condition_variable sync_cv;
   
   auto iterate = [&]() {
     
     while (itr_ctr.load() > 0) {
-      // while (restart_ctr.load() != 0);
+      while (restart_ctr.load() != 0);
       // { //debugging purpose
       // 	lock_guard <mutex> lck(print_mutex);
       // 	cout << this_thread::get_id() << " start\n";
@@ -154,73 +154,107 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       //TODO: make sure randomness
 
       // Read mean_z
-      double* old_mean_z = new double [dim];
-      for (int i = 0; i < dim; i++) {
-	old_mean_z[i] = mean_z[i];
+      double* old_mean_z = new double [dim]; // TODO: allocate once for each thread
+      
+      
+      for (int c = 0; c < dim; c++) {
+	old_mean_z[c] = mean_z[c];
       }
+      
       read_ctr++;
       // Read is done
    
       // Calculation
-      double *grad_ik = grad_fi(old_mean_z, x_v[ik], y[ik], s, dim);
+      double *delta_z_ik = grad_fi(old_mean_z, x_v[ik], y[ik], s, dim);
+    
       
       for (int c =  0; c < dim; c++) {
-	old_mean_z[c] -= 1.0/ alpha/ s * grad_ik[c];
-      }  // Now old_mean_z becomes new_z_ik
-      delete[] grad_ik;
-      
-      double* incr_z = new double[dim];
-      for (int c = 0; c < dim; c++)
-	incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
+	delta_z_ik[c] *= - 1.0/ alpha/ s;
+      }  // Now delta_z_ik stores the amount added to old_mean_z to become new_z_ik
 
-      // while (read_ctr < num_thread);
-      
-      // {
-	// lock_guard <mutex> lck(mean_z_mutex);
-	vector_increment(mean_z, incr_z, dim);       // mean_z update
-	// delete[] incr_z;
-      // }
-      
       
 
+
+      //------------------------------------------------------------------------------
+      // SYNCHRONIZATION
+      while (read_ctr < num_thread) {} //busy while loop
+      //------------------------------------------------------------------------------
       // z_ik update with block_lock
-      // {
-	// lock_guard <mutex> lck(block_mutex[ik]);
-	delete[] z_v[ik];
-	// z_v[ik] = old_mean_z;
-      // }
-      
+
+      {
+	lock_guard <mutex> lck(block_mutex[ik]);
+	double* old_z_ik =  new double[dim];
+	for (int c = 0; c < dim; c++)
+	  old_z_ik[c] = z_v[ik][c];
+	
+	if (repeated_index[ik]) {
+	  vector_increment(z_v[ik], delta_z_ik, dim);
+	  delete[] old_mean_z;
+	}
+	else {
+	  z_v[ik] = old_mean_z;
+	  vector_increment(z_v[ik], delta_z_ik, dim);
+	  repeated_index[ik] = 1;
+	}
+	
+	double* incr_mean_z = new double[dim];
+        for (int c = 0; c < dim; c++)
+	  incr_mean_z[c] = 1.0/n * (z_v[ik][c]- old_z_ik[c]);
+	{
+	  lock_guard <mutex> lck(mean_z_mutex);
+	  //mean_z += incr_z
+	  //what if += is atomic? Then we don't have to lock (mutex)
+	  //you can achieve atomic += with "compare-and-swap" or "compare-and-exchange"
+	  vector_increment(mean_z, incr_mean_z, dim);       // mean_z update
+	  delete[] incr_mean_z;
+	}  
+      // delete[] z_v[ik];
+      // z_v[ik] = old_mean_z;   // TODO: a bug here - you should substract twice!
+      }
+    
       
       itr_ctr--;
-
+      //------------------------------------------------------------------------------
+      //SYNCHRONIZATION
+      //------------------------------------------------------------------------------
       //TODO: Synchronize
-      // {
-      // 	lock_guard <mutex> lck(sync_mutex);
-      // 	int ctr = sync_ctr.load();
+      {
+	lock_guard <mutex> lck(sync_mutex);
+	int ctr = sync_ctr.load();
 	
-      // 	// { //debugging purpose
-      // 	//   lock_guard <mutex> lck(print_mutex);
-      // 	//   cout << this_thread::get_id() << " obtain a lock for increase\n";
-      // 	// }
+	// { //debugging purpose
+	//   lock_guard <mutex> lck(print_mutex);
+	//   cout << this_thread::get_id() << " obtain a lock for increase\n";
+	// }
 	
-      //   sync_ctr.store((ctr+1) % num_thread);
-      // 	if (sync_ctr.load()==0) {
-      // 	  // { //debugging purpose
-      // 	  //   lock_guard <mutex> lck(print_mutex);
-      // 	  //   cout << this_thread::get_id() << " notify to wake up\n";
-      // 	  // }
-      // 	  restart_ctr.store(num_thread - 1);
-      // 	  read_ctr.store(0);
+        sync_ctr.store((ctr+1) % num_thread);
+	if (sync_ctr.load()==0) {
+	  
+	  // { //debugging purpose
+	  //   lock_guard <mutex> lck(print_mutex);
+	  //   cout << this_thread::get_id() << " notify to wake up\n";
+	  // }
+	  
+	  /****************************************************************/
+	  /*Whatever should be executed only once for each batch iteration*/
+	  /***************************************************************/
+	  
+	  restart_ctr.store(num_thread - 1);
+	  
+	  read_ctr.store(0);
+	  for (int i = 0; i < n; i++)
+	    repeated_index[i] = 0;
+	  
 	  // cout << endl;
 	  // { //debugging
 	  //   lock_guard <mutex> lck(print_mutex);
 	  //   cout << this_thread::get_id() <<" set restart_ctr to "
 	  // 	 << restart_ctr.load() <<endl;
 	  // }
-	  // sync_cv.notify_all();
-	  // continue;
-	// }
-      // }	  
+	  sync_cv.notify_all();
+	  continue;
+	}
+      }	  
 
       // { //debugging purpose
       // 	lock_guard <mutex> lck(print_mutex);
@@ -228,7 +262,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // 	<< sync_ctr.load() << endl;
       // }
 
-      // unique_lock <mutex> lck(sync_mutex);
+      unique_lock <mutex> lck(sync_mutex);
 
       sync_cv.wait(lck, [&](){	    
 	  // { //debugging purpose

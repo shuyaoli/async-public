@@ -2,7 +2,7 @@ Initialize;
 
 tic
 
-db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, 2);
+db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, 1);
 
 toc
 
