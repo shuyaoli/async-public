@@ -2,13 +2,13 @@ clear;
 seed = 1;
 rng(seed);
 
-n = 1000; 
-dim = 3; 
+n = 10000; 
+dim = 300; 
 err = 0.01; 
 % initializer_prefactor = 0; 
 
 alpha = 2;   % training, toMEX
-epoch = 50; % training, toMEX
+epoch = 30; % training, toMEX
 
 s = 1; % function to be optimized, toMEX
 
