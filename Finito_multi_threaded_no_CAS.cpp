@@ -2,15 +2,14 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
-#include <mex.h>
 #include <thread>
 #include <mutex>
 #include <time.h>
-#include <future>
 #include <condition_variable>
 #include <atomic>
-#include <chrono>
+#include <chrono>  // debugging, set a waiting maximum
 #include <random>
+#include <mex.h>
 
 using namespace std;
 
@@ -42,6 +41,19 @@ void atomic_double_fetch_add (atomic <double> &p,
     desired = old + a;
   }
 }
+
+// An suggested, possibly optimized version of cas;
+// But for now I don't understand memory order
+
+// void atomic_double_fetch_add (atomic <double> &p,
+// 			      double a) {
+//   double old = p.load(std::memory_order_consume);
+//   double desired = old + a;
+//   while(!p.compare_exchange_weak(old, desired,
+//         std::memory_order_release, std::memory_order_consume)) {
+//     desired = old + a;
+//   }
+// }
 
 void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
   for (int i = 0; i < dim; i++)
@@ -76,23 +88,11 @@ double** array2rowvectors (const double *array, int num_row, int num_col) {
   return matrix;
 }
 
-double* mean_rowvectors(double** x, int num_row, int num_col) {
-  double* result = new double[num_col];
-  for (int c = 0; c < num_col; c++) {
-    double s = 0.0;
-    for (int r = 0; r < num_row; r++)
-      s += x[r][c];
-    result[c] = s / num_row;
-  }
-  return result;
-}
-
 void delete_double_ptr (double **x, int M) {
   for (int i = 0; i < M; i++)
     delete [] x[i];
   delete[]x;
 }
-
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
@@ -111,166 +111,120 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   double** x_v = array2rowvectors (x, n, dim);  //delete
 
   double** z_v = new double* [n];
-  for (int i = 0; i < n; i++) {
-    z_v[i] = new double [dim];
-    for (int c = 0; c < dim; c++){
-      z_v[i][c] = 1.0/alpha/s/2 * y[i] * x_v[i][c];
-    }
+  for (int r = 0; r < n; r++) {
+    z_v[r] = new double [dim] ();
   }
 
   atomic_int sync_ctr(0), restart_ctr(0); // For synchronization
   atomic_int itr_ctr(epoch * n); // Tracking iteration
   atomic_int read_ctr(0);  // Make sure write is done after read
 
-  mutex print_mutex;
-  mutex mean_z_mutex;
-  mutex sync_mutex;
+  // mutex print_mutex; // debugging purpose
+  mutex sync_mutex; 
   mutex restart_mutex;
   mutex read_mutex;
+  mutex mean_z_mutex;
   mutex* block_mutex = new mutex [n];
     
   condition_variable sync_cv, restart_cv, read_cv;
   
-  // Allocate memory for all  threads
-  // double* mean_z =  mean_rowvectors(z_v, n, dim);
-  atomic <double> *mean_z = new atomic <double> [dim];
-  for (int c = 0; c < dim; c++) {
-    double s = 0;
-    for (int r = 0; r < n; r++)
-      s += z_v[r][c];
-    mean_z[c].store(s/n);
-  }
+  // Allocate shared memory for all threads
+  double *mean_z = new double [dim] ();
 
-  
-  bool* repeated_index = new bool [n] ();
-
-  
   auto iterate = [&]() {
-    // Allocate memory for each thread
-    double *incr_mean_z = new double [dim];
-    double *delta_z_ik = new double [dim];
+    // Allocate local memory for each thread
+    double *old_mean_z = new double [dim];
+    double *delta_z = new double [dim];
+    
     while (itr_ctr.load() > 0) {
-      while(restart_ctr.load() > 0); //busy while loop
-      // {
-      // 	lock_guard <mutex> lck(restart_mutex);
-      // 	if (restart_ctr.load()==0) {
-      // 	  restart_cv.notify_all();
-      // 	}
-      // }
-	  
-      // unique_lock <mutex> restart_lck(restart_mutex);
-      // restart_cv.wait(restart_lck, [&restart_ctr]{
-      // 	  return restart_ctr.load() == 0;
-      // 	});
-      // restart_lck.unlock();
+      // while(restart_ctr.load() > 0); //equivalent busy while loop
+      /****************************************************************/
+      /******************SYNCHRONIZATION*******************************/
+      /****************************************************************/
+      unique_lock <mutex> restart_notify_lck(restart_mutex);
+      if (restart_ctr.load()==0) {
+      	restart_notify_lck.unlock();
+      	restart_cv.notify_all();
+      }
+      else
+      	restart_notify_lck.unlock();
       
-      // Allocate memory for each iteration
+      unique_lock <mutex> restart_lck(restart_mutex);
+      restart_cv.wait(restart_lck, [&restart_ctr]{
+      	  return restart_ctr.load() == 0;
+      	});
+      restart_lck.unlock();
+      /*****************************START*****************************/
       int ik = intRand(0, n - 1);
 
       // Read mean_z
-      double* old_mean_z = new double [dim]; 
       for (int c = 0; c < dim; c++) {
-	old_mean_z[c] = mean_z[c].load();
+	old_mean_z[c] = mean_z[c];
       }
       read_ctr++;
       // Read is done
    
       // Calculation for delta_z_ik
-      grad_fi(delta_z_ik, old_mean_z, x_v[ik], y[ik], s, dim);
+      grad_fi(delta_z, old_mean_z, x_v[ik], y[ik], s, dim);
       for (int c =  0; c < dim; c++) {
-	delta_z_ik[c] *= - 1.0/ alpha/ s;
-      }  // Now delta_z_ik stores the amount added to old_mean_z to become new_z_ik
+	delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
+      }  // Now delta_z is delta_z_ik
 
+      { // update z_v[ik]
+	lock_guard <mutex> lck(block_mutex[ik]);
+	vector_increment(z_v[ik], delta_z, dim);
+      }
+
+      for (int c = 0; c < dim; c++) {
+	delta_z[c] /= n;
+      } // Now delta_z is delta_mean_z
+      
       /****************************************************************/
       /******************SYNCHRONIZATION*******************************/
       /***************************************************************/
-      // {
-      // 	lock_guard <mutex> lck(read_mutex);
-      // 	if (read_ctr.load()==num_thread) {
-      // 	  read_cv.notify_all();
-      // 	}
-      // }
-	  
-      // unique_lock <mutex> read_lck(read_mutex);
-      // read_cv.wait(read_lck, [&read_ctr, num_thread]{
-      // 	  return read_ctr.load() == num_thread;
-      // 	});
-      // read_lck.unlock();
-      while (read_ctr < num_thread) {} //busy while loop
+      // while (read_ctr < num_thread); // equivalent busy while loop
+      unique_lock <mutex> read_notify_lck(read_mutex);
+      if (read_ctr.load()==num_thread) {
+	read_notify_lck.unlock();
+	read_cv.notify_all();
+      }
+      else
+	read_notify_lck.unlock();
+      
+      unique_lock <mutex> read_lck(read_mutex);
+      read_cv.wait(read_lck, [&read_ctr, num_thread]{
+      	  return read_ctr.load() == num_thread;
+      	});
+      read_lck.unlock();
       /***************************************************************/
 
-      // z_ik update with block lock
+      // increament mean_z
       {
-	lock_guard <mutex> lck(block_mutex[ik]);
-
-	if (repeated_index[ik]) {
-	  /****************************************************************/
-	  /**********************Here is a bug!***************************/
-	  /***************************************************************/
-	  // vector_increment(z_v[ik], delta_z_ik, dim);
-	  
-	  // incr_mean_z = delta_z_ik;
-	  // note that after mem optimization,
-	  // both var are owned by thread, not iteration
-	  
-	  // for (int c = 0; c < dim; c++)
-	  //   incr_mean_z[c] *= 1.0 / n;
-	  /****************************************************************/
-	  /**********************Bug Workaround***************************/
-	  /*I did NOT update ANYTHING if index is repeated****************/
-	  for (int c = 0; c < dim; c++)
-	    incr_mean_z[c] = 0;
-	  /****************************************************************/
-	  delete[] old_mean_z;
-	}
-	else {
-	  double* old_z_ik =  z_v[ik];
-
-	  z_v[ik] = old_mean_z;
-	  vector_increment(z_v[ik], delta_z_ik, dim);
-
-	  for (int c = 0; c < dim; c++)
-	    incr_mean_z[c] = 1.0/n * (z_v[ik][c]- old_z_ik[c]);
-
-	  delete[] old_z_ik;
-
-	  
-	  repeated_index[ik] = 1;
-	}
-
-	{
-	  // lock_guard <mutex> lk(mean_z_mutex);
-	  //mean_z += incr_z
-	  //what if += is atomic? Then we don't have to lock (mutex)
-	  //you can achieve atomic += with "compare-and-swap" or "compare-and-exchange"
-	  atomic_vector_increment(mean_z, incr_mean_z, dim);       // mean_z update
-	}  
-      // deelte[] z_v[ik];
-      // z_v[ik] = old_mean_z;   // TODO: a bug here - you should substract twice!
+	lock_guard <mutex> lck(mean_z_mutex);
+	vector_increment(mean_z, delta_z, dim);
       }
-    
+
+      // update iteration counter
       itr_ctr--;
+      
       /****************************************************************/
       /**********************SYNCHRONIZATION***************************/
       /****************************************************************/
-      {
-	lock_guard <mutex> lck(sync_mutex);
-	int ctr = sync_ctr.load();
-	sync_ctr.store((ctr+1) % num_thread);
-	if (sync_ctr.load()==0) {
-	  /****************************************************************/
-	  /*Whatever should be executed only once for each batch iteration*/
-	  /***************************************************************/
-	  
-	  restart_ctr.store(num_thread - 1);
-	  read_ctr.store(0);
-
-	  /***************************************************************/
-	  sync_cv.notify_all();
-	  repeated_index[ik] = 0;
-	  continue;
-	}
+      unique_lock <mutex> notify_lck(sync_mutex);
+      int ctr = sync_ctr.load();
+      sync_ctr.store((ctr+1) % num_thread);
+      if (sync_ctr.load()==0) {
+	/****************************************************************/
+	/*Whatever should be executed only once for each batch iteration*/
+	/***************************************************************/
+	restart_ctr.store(num_thread - 1);
+	read_ctr.store(0);
+	/***************************************************************/
+	notify_lck.unlock();
+	sync_cv.notify_all();
+	continue;
       }
+      notify_lck.unlock();
       
       unique_lock <mutex> lck(sync_mutex);
 
@@ -279,11 +233,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	});
       
       lck.unlock();
-      repeated_index[ik] = 0;
       restart_ctr--;
     }
-    delete[] incr_mean_z;
-    delete[] delta_z_ik;
+    delete[] delta_z;
+    delete[] old_mean_z;
   };
 
   vector <thread> threads;
@@ -294,13 +247,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
   for (auto& t: threads) t.join();
 
-  // Output 
+  // MATLAB Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
   double * ptr = mxGetPr(plhs[0]);
   
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c].load(); 
+    ptr[c] = mean_z[c]; 
 
   plhs[1] = mxCreateDoubleMatrix(n, dim, mxREAL);
   double * ptr1 = mxGetPr(plhs[1]);
@@ -312,7 +265,4 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   delete_double_ptr(x_v,n);
   delete_double_ptr(z_v,n);
-  
-  return;
-  
 }

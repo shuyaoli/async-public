@@ -106,9 +106,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   double* mean_z =  mean_rowvectors(z_v, n, dim);
 
-  srand(1);
+  srand(time(NULL));
       
-  
   for (int k = 0; k < n * epoch; k++) {
 
     // Pick j
@@ -119,8 +118,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
     for (int i = 0; i < dim; i++) {
       old_mean_z[i] = mean_z[i];
-    }    
-    // TODO: signal that read is done
+    }
    
     // Calculation
     double *grad_ik = grad_fi(old_mean_z, x_v[ik], y[ik], s, dim);
@@ -133,7 +131,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     double* incr_z = new double[dim];
     for (int c = 0; c < dim; c++)
       incr_z[c] = 1.0/n * (old_mean_z[c] - z_v[ik][c]);
-
     // z_ik update
     delete[] z_v[ik];
     z_v[ik] =  old_mean_z;
@@ -141,10 +138,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     // mean_z update
     vector_increment(mean_z, incr_z, dim);
     delete[] incr_z;
-
-    delete[] old_mean_z;
   }
-  
   // Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
@@ -157,7 +151,4 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   delete_double_ptr(x_v,n);
   delete_double_ptr(z_v,n);
-  
-  return;
-  
 }
