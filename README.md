@@ -19,4 +19,4 @@ Finito\_single\_threaded.cpp is the final vision for single threaded implementat
 
 Finito\_multi\_threaded.cpp is the final vision for multi threaded implementation.
 
-\_no\_CAS means the implementation *locks mean\_z* rather than use _compare and swap_; it's speed is roughly the same as the wait-free version which is unexpected.
+\_no\_CAS means the implementation **locks mean\_z** rather than use _compare and swap_; it's speed is roughly the same as the wait-free version which is unexpected.
