@@ -108,7 +108,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   const int epoch = *mxGetPr(prhs[4]);
   const int num_thread = *mxGetPr(prhs[5]);
     
-  double** x_v = array2rowvectors (x, n, dim);  //new
+  double** x_v = array2rowvectors (x, n, dim);  //delete
 
   double** z_v = new double* [n];
   for (int r = 0; r < n; r++) {
@@ -123,12 +123,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   mutex sync_mutex; 
   mutex restart_mutex;
   mutex read_mutex;
+  mutex mean_z_mutex;
   mutex* block_mutex = new mutex [n];
     
   condition_variable sync_cv, restart_cv, read_cv;
   
   // Allocate shared memory for all threads
-  atomic <double> *mean_z = new atomic <double> [dim] ();
+  double *mean_z = new double [dim] ();
 
   auto iterate = [&]() {
     // Allocate local memory for each thread
@@ -158,7 +159,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // Read mean_z
       for (int c = 0; c < dim; c++) {
-	old_mean_z[c] = mean_z[c].load();
+	old_mean_z[c] = mean_z[c];
       }
       read_ctr++;
       // Read is done
@@ -198,7 +199,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       /***************************************************************/
 
       // increament mean_z
-      atomic_vector_increment(mean_z, delta_z, dim);
+      {
+	lock_guard <mutex> lck(mean_z_mutex);
+	vector_increment(mean_z, delta_z, dim);
+      }
 
       // update iteration counter
       itr_ctr--;
@@ -249,7 +253,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   double * ptr = mxGetPr(plhs[0]);
   
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c].load(); 
+    ptr[c] = mean_z[c]; 
 
   plhs[1] = mxCreateDoubleMatrix(n, dim, mxREAL);
   double * ptr1 = mxGetPr(plhs[1]);

@@ -30,7 +30,7 @@ for k = 1: n * epoch
             error_rate = 1 - sum(result == y) / size(result,1);
 
         
-            fprintf('Itr: %d. Error: %f. Cost function: %.10f.\n', k, error_rate, (f(mean(phi, 1)', x, y, s)));
+            fprintf('Itr: %d. Error: %f. Cost function: %.14f.\n', k, error_rate, (f(mean(phi, 1)', x, y, s)));
         end
 end
 toc
