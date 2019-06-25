@@ -27,10 +27,10 @@ double sig (double x) {
   return 1.0/(1 + exp(-x));
 }
 
-double dot (double* x, double* y, int dim) {
+double dot (atomic <double>* x, double* y, int dim) {
   double result = 0.0;
   for (int i = 0; i < dim; i++) 
-    result += x[i] * y[i];
+    result += x[i].load() * y[i];
   return result;
 }
 
@@ -43,6 +43,10 @@ void atomic_double_fetch_add (atomic <double> &p,
   }
 }
 
+void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
+  for (int i = 0; i < dim; i++)
+    atomic_double_fetch_add (x[i], incr[i]);
+}
 // An suggested, possibly optimized version of cas;
 // But for now I don't understand memory order
 
@@ -61,9 +65,9 @@ void vector_increment(double* x, double* incr, int dim){
     x[i] += incr[i];
 }
 
-void grad_fi(double* result, double* w, double* xi, double yi, double s, int dim) {
+void grad_fi(double *result, atomic <double> *w, double *xi, double yi, double s, int dim) {
   for (int j = 0; j < dim; j++) {
-    result[j] = -sig( -yi * dot(w, xi, dim)) * yi * xi[j] + s * w[j];
+    result[j] = -sig( -yi * dot(w, xi, dim)) * yi * xi[j] + s * w[j].load();
   }
 }
 
@@ -106,51 +110,33 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
   double** x_v = array2rowvectors (x, n, dim);  //new
 
-  double** z_v = new double* [n];
+  atomic <double>** z_v = new atomic <double>* [n];
   for (int r = 0; r < n; r++) {
-    z_v[r] = new double [dim] ();
+    z_v[r] = new atomic <double> [dim] ();
   }
 
-  // atomic_int sync_ctr(0), restart_ctr(0); // For synchronization
   atomic_int itr_ctr(epoch * n); // Tracking iteration
-  // atomic_int read_ctr(0);  // Make sure write is done after read
-
-  // mutex print_mutex; // debugging purpose
-  // mutex sync_mutex; 
-  // mutex restart_mutex;
-  // mutex read_mutex;
-  shared_mutex mean_z_mutex;
-  // unique_lock <mutex> mean_z_lock(mean_z_mutex, defer_lock);
-  shared_mutex* block_mutex = new shared_mutex [n];
-    
-  // condition_variable sync_cv, restart_cv, read_cv;
   
   // Allocate shared memory for all threads
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
   auto iterate = [&]() {
     // Allocate local memory for each thread
-    double *old_mean_z = new double [dim];
+
     double *delta_z = new double [dim];
     
     while (itr_ctr.load() > 0) {
 
       int ik = intRand(0, n - 1);
 
-      // Read mean_z
-      
-      for (int c = 0; c < dim; c++) {
-	old_mean_z[c] = mean_z[c].load();
-      }
-
       // Calculation for delta_z_ik
-      grad_fi(delta_z, old_mean_z, x_v[ik], y[ik], s, dim);
+      grad_fi(delta_z, mean_z, x_v[ik], y[ik], s, dim);
       for (int c =  0; c < dim; c++) {
-	delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
+	delta_z[c] = mean_z[c].load() - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
       }  // Now delta_z is delta_z_ik
 
       // update z_v[ik]
-      vector_increment(z_v[ik], delta_z, dim);
+      atomic_vector_increment(z_v[ik], delta_z, dim);
 
       // increament mean_z
       for (int c = 0; c < dim; c++)
@@ -160,7 +146,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       itr_ctr--;
     }
     delete[] delta_z;
-    delete[] old_mean_z;
   };
 
   vector <thread> threads;
@@ -182,8 +167,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   delete[] mean_z;
   
   delete_double_ptr(x_v,n);
-  delete_double_ptr(z_v,n);
 
+  for (int i = 0; i < n; i++)
+    delete [] z_v[i];
+  delete []z_v;
+  
   atomic <double> test;
   cout << boolalpha
        <<"atomic <double>  is lock free? "
