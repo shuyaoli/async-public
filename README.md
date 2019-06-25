@@ -1,7 +1,20 @@
+# Compile
+Use ```mex CXXFLAGS="\$CXXFLAGS -std=c++17"``` to compile *.cpp files.
+
+# Run MATLAB
+Use ```LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 matlab &``` to run MATLAB from command line.
+
+# Filename explain
 Folder _cpp_ is used to store testing .cpp files.
 
-_main\_*.m_ with "MATLAB" in "*" is implemented with MATLAB.
+_main\_*.m_ with "MATLAB" in * is implemented with MATLAB.
 
-_main\_*.m_ with "mex" in "*" is implemented with mex and C++.
+_main\_*.m_ with "mex" in * is implemented with mex and C++.
 
 All files ending with "direct" means the implementation is straightforward from Finito paper without further optimization, i.e. different from the one in the textbook.
+
+Finito\_single\_threaded.cpp is the final vision for single threaded implementation.
+
+Finito\_multi\_threaded.cpp is the final vision for multi threaded implementation.
+
+\_no\_CAS means the implementation locks mean\_z rather than use compare and swap; it's speed is roughly the same as the wait-free version.

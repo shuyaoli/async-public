@@ -7,7 +7,7 @@ dim = 3000;
 err = 0.01; 
 
 alpha = 2;
-epoch = 30;
+epoch = 15;
 
 s = 1; % function to be optimized, toMEX
 
