@@ -2,12 +2,12 @@ clear;
 seed = 1;
 rng(seed);
 
-n = 5000; 
-dim = 300; 
+n = 10000; 
+dim = 3000; 
 err = 0.01; 
 
 alpha = 2;
-epoch = 30;
+epoch = 15;
 
 s = 1; % function to be optimized, toMEX
 

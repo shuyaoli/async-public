@@ -149,15 +149,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   };
 
   vector <thread> threads;
-
   for (int i = 0; i < num_thread; i++) {
     threads.push_back(thread(iterate));
   }
-
   for (auto& t: threads) t.join();
 
   // MATLAB Output 
-  
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
   double * ptr = mxGetPr(plhs[0]);
   
