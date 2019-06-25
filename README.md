@@ -1,7 +1,7 @@
-Those files with filename ending with "ls" is related to testing my code with least square.
+Folder _cpp_ is used to store testing .cpp files.
 
-Those files ending with "mex" is related to logistic regression implemented in C++ and mex.
+_main\_*.m_ with "MATLAB" in "*" is implemented with MATLAB.
 
-All other ".m" file is for logistic regression with Finito implemented in MATLAB.
+_main\_*.m_ with "mex" in "*" is implemented with mex and C++.
 
-All files ending with "direct" means the implementation is straightforward from Finito paper without further optimization.
+All files ending with "direct" means the implementation is straightforward from Finito paper without further optimization, i.e. different from the one in the textbook.
