@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <thread>
 #include <mutex>
+#include <shared_mutex>
 #include <time.h>
 #include <condition_variable>
 #include <atomic>
@@ -123,7 +124,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // mutex sync_mutex; 
   // mutex restart_mutex;
   // mutex read_mutex;
-  mutex mean_z_mutex;
+  shared_mutex mean_z_mutex;
   // unique_lock <mutex> mean_z_lock(mean_z_mutex, defer_lock);
   mutex* block_mutex = new mutex [n];
     
@@ -143,7 +144,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // Read mean_z
       {
-	lock_guard <mutex> lck(mean_z_mutex);
+        shared_lock lck(mean_z_mutex);
 	for (int c = 0; c < dim; c++) {
 	  old_mean_z[c] = mean_z[c].load();
 	}
@@ -157,7 +158,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }  // Now delta_z is delta_z_ik
 
       { // update z_v[ik]
-	lock_guard <mutex> lck(block_mutex[ik]);
+        lock_guard lck(block_mutex[ik]);
 	vector_increment(z_v[ik], delta_z, dim);
       }
 
@@ -168,7 +169,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // increament mean_z
       {
-	lock_guard <mutex> lck(mean_z_mutex);
+        unique_lock lck(mean_z_mutex);
 	atomic_vector_increment(mean_z, delta_z, dim);
       }
       
