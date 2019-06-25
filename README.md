@@ -19,4 +19,4 @@ Finito\_single\_threaded.cpp is the final version for single threaded implementa
 
 **Finito_multi_threaded.cpp is the final version for synchronous multi threaded implementation. The associated main.m file is main_mex_multi_threaded.m**
 
-\_no\_CAS means the implementation **locks mean\_z rather than use _compare and swap_**; it's speed is roughly the same as the wait-free version.
+\_no\_CAS means the implementation **locks *mean\_z* rather than use _compare and swap_**; it's speed is roughly the same as the wait-free version.
