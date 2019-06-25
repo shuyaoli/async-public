@@ -7,7 +7,7 @@ Use ```mex CXXFLAGS="\$CXXFLAGS -std=c++17"``` to compile *.cpp files from MATLA
 Use ```LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 matlab &``` to run MATLAB from command line.
 
 # Filename explain
-Folder _cpp/_ is used to store testing .cpp files.
+Folder _cpp/_ is used to store testing .cpp files; it's unimportant.
 
 _main\_*.m_ with "MATLAB" in * is implemented with MATLAB.
 
