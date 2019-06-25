@@ -3,7 +3,7 @@ seed = 1;
 rng(seed);
 
 n = 5000; 
-dim = 30; 
+dim = 300; 
 err = 0.01; 
 
 alpha = 2;

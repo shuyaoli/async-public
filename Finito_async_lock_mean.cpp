@@ -56,11 +56,6 @@ void atomic_double_fetch_add (atomic <double> &p,
 //   }
 // }
 
-void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
-  for (int i = 0; i < dim; i++)
-    atomic_double_fetch_add (x[i], incr[i]);
-}
-
 void vector_increment(double* x, double* incr, int dim){
   for (int i = 0; i < dim; i++)
     x[i] += incr[i];
@@ -126,7 +121,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // mutex read_mutex;
   shared_mutex mean_z_mutex;
   // unique_lock <mutex> mean_z_lock(mean_z_mutex, defer_lock);
-  mutex* block_mutex = new mutex [n];
+  shared_mutex* block_mutex = new shared_mutex [n];
     
   // condition_variable sync_cv, restart_cv, read_cv;
   
@@ -137,6 +132,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     // Allocate local memory for each thread
     double *old_mean_z = new double [dim];
     double *delta_z = new double [dim];
+    double *old_z_ik = new double [dim];
     
     while (itr_ctr.load() > 0) {
 
@@ -145,8 +141,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // Read mean_z
       {
         shared_lock lck(mean_z_mutex);
+	shared_lock lk(block_mutex[ik]);
 	for (int c = 0; c < dim; c++) {
 	  old_mean_z[c] = mean_z[c].load();
+	  old_z_ik[c] = z_v[ik][c];
 	}
       }
       // Read is done
@@ -154,23 +152,20 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // Calculation for delta_z_ik
       grad_fi(delta_z, old_mean_z, x_v[ik], y[ik], s, dim);
       for (int c =  0; c < dim; c++) {
-	delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
+	delta_z[c] = old_mean_z[c] - old_z_ik[c] - 1.0/ alpha/ s * delta_z[c]; 
       }  // Now delta_z is delta_z_ik
 
       { // update z_v[ik]
-        lock_guard lck(block_mutex[ik]);
+        unique_lock lck(block_mutex[ik]);
 	vector_increment(z_v[ik], delta_z, dim);
       }
-
-      for (int c = 0; c < dim; c++) {
-	delta_z[c] /= n;
-      } // Now delta_z is delta_mean_z
       
 
       // increament mean_z
       {
         unique_lock lck(mean_z_mutex);
-	atomic_vector_increment(mean_z, delta_z, dim);
+          for (int c = 0; c < dim; c++)
+	    atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
       }
       
       // update iteration counter
@@ -178,6 +173,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     }
     delete[] delta_z;
     delete[] old_mean_z;
+    delete[] old_z_ik;
   };
 
   vector <thread> threads;
