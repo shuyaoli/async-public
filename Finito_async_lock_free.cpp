@@ -88,12 +88,6 @@ double** array2rowvectors (const double *array, int num_row, int num_col) {
   return matrix;
 }
 
-void delete_double_ptr (double **x, int M) {
-  for (int i = 0; i < M; i++)
-    delete [] x[i];
-  delete[]x;
-}
-
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
 //     Input: x, y, initial random weight phi, alpha, s, epoch
@@ -132,7 +126,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // Calculation for delta_z_ik
       grad_fi(delta_z, mean_z, x_v[ik], y[ik], s, dim);
       for (int c =  0; c < dim; c++) {
-	delta_z[c] = mean_z[c].load() - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
+	delta_z[c] = mean_z[c].load() - z_v[ik][c].load() - 1.0/ alpha/ s * delta_z[c]; 
       }  // Now delta_z is delta_z_ik
 
       // update z_v[ik]
@@ -159,11 +153,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   double * ptr = mxGetPr(plhs[0]);
   
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c].load(); 
+    ptr[c] = mean_z[c].load();
   
   delete[] mean_z;
   
-  delete_double_ptr(x_v,n);
+  for (int i = 0; i < n; i++)
+    delete [] x_v[i];
+  delete []x_v;
 
   for (int i = 0; i < n; i++)
     delete [] z_v[i];
