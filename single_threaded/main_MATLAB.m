@@ -1,3 +1,5 @@
+addpath('../routine_work/');
+
 Initialize;
 
 
@@ -75,3 +77,5 @@ fprintf('%.10f\n',f(mean(phi, 1)', x, y, s));
 %     final_sum = final_sum + fi(db_trained',x(i,:),y(i),s);
 % end
 % assert(final_sum/n == f(db_trained',x,y,s))
+
+rmpath('../routine_work/');

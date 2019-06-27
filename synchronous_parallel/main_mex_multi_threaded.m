@@ -1,3 +1,5 @@
+addpath('../routine_work/');
+
 Initialize;
 
 tic
@@ -13,3 +15,5 @@ result = 2 * result - 1;
 
 error_rate = 1 - sum(result == y) / size(result,1);
 fprintf('The cost is %.15f\n',f(db_trained', x, y, s));
+
+rmpath('../routine_work/');

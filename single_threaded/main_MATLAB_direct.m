@@ -1,3 +1,5 @@
+addpath('../routine_work/');
+
 Initialize;
 
 
@@ -76,3 +78,4 @@ error_rate = 1 - sum(result == y) / size(result,1)
 %     final_sum = final_sum + fi(db_trained',x(i,:),y(i),s);
 % end
 % assert(final_sum/n == f(db_trained',x,y,s))
+rmpath('../routine_work/');
