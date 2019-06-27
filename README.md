@@ -1,7 +1,7 @@
 # Compile
-Use ```mex CXXFLAGS="\$CXXFLAGS -std=c++17 <FILENAME>.cpp"``` to compile ```<FILENAME>.cpp``` from MATLAB, e.g.
+Use ```mex CXXFLAGS="\$CXXFLAGS -std=c++17 -latomic" <FILENAME>.cpp``` to compile ```<FILENAME>.cpp``` from MATLAB, e.g.
 
-```mex CXXFLAGS="\$CXXFLAGS -std=c++17" Finito_multi_threaded.cpp``` compiles ```Finito_multi_threaded.cpp```
+```mex CXXFLAGS="\$CXXFLAGS -std=c++17 -latomic" Finito_multi_threaded.cpp``` compiles ```Finito_multi_threaded.cpp```
 
 # Run MATLAB
 Use ```LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 matlab &``` to run MATLAB from command line.
