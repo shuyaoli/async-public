@@ -8,13 +8,13 @@
 #include <time.h>
 #include <condition_variable>
 #include <atomic>
-#include <chrono>  // debugging, set a waiting maximum
+#include <chrono> 
 #include <random>
 #include <mex.h>
 
 using namespace std;
 
-int intRand(const int & min, const int & max) {
+inline int intRand(const int & min, const int & max) noexcept{
     static thread_local mt19937* generator = nullptr;
     if (!generator)
       generator = new mt19937(clock() +
@@ -23,19 +23,18 @@ int intRand(const int & min, const int & max) {
     return distribution(*generator);
 }
 
-double sig (double x) {
-  return 1.0/(1 + exp(-x));
-}
+// inline double sig (double x) noexcept {
+//   return 1.0/(1 + exp(-x));
+// }
 
-double dot (atomic <double>* x, double* y, int dim) {
+inline double dot (double* x, double* y, int dim) noexcept {
   double result = 0.0;
   for (int i = 0; i < dim; i++) 
-    result += x[i].load() * y[i];
+    result += x[i] * y[i];
   return result;
 }
 
-void atomic_double_fetch_add (atomic <double> &p,
-			      double a) {
+inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
   double old = p.load();
   double desired = old + a;
   while(!p.compare_exchange_weak(old, desired)) {
@@ -43,7 +42,7 @@ void atomic_double_fetch_add (atomic <double> &p,
   }
 }
 
-void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
+inline void atomic_vector_increment(atomic <double> x[], double incr[], int dim) noexcept{
   for (int i = 0; i < dim; i++)
     atomic_double_fetch_add (x[i], incr[i]);
 }
@@ -60,20 +59,13 @@ void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
 //   }
 // }
 
-void vector_increment(double* x, double* incr, int dim){
+inline void vector_increment(double* x, double* incr, int dim) noexcept{
   for (int i = 0; i < dim; i++)
     x[i] += incr[i];
 }
 
-void grad_fi(double *result, atomic <double> *w, double *xi, double yi, double s, int dim) {
-  for (int j = 0; j < dim; j++) {
-    result[j] = -sig( -yi * dot(w, xi, dim)) * yi * xi[j] + s * w[j].load();
-  }
-}
-
-double** array2rowvectors (const double *array, int num_row, int num_col) {
-  // return a vector of row vectors
-  // Test: 
+inline double** array2rowvectors (const double *array, int num_row, int num_col) noexcept {
+  // return a vector of row vectors, e.g.
   //     input {1,2,3,4,5,6}, 
   //     output 
   //            1 3 5
@@ -88,10 +80,17 @@ double** array2rowvectors (const double *array, int num_row, int num_col) {
   return matrix;
 }
 
+// inline void grad_fi(double* result, atomic <double>* w, double* xi, double yi, double s, int dim) noexcept {
+//   for (int j = 0; j < dim; j++) {
+//     result[j] = -1.0/(1+exp(yi * dot(w, xi, dim))) * yi * xi[j] + s * w[j].load();
+//   }
+// }
+
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
 //     Input: x, y, initial random weight phi, alpha, s, epoch
 //     Output: trained decision boundary
+
   const int n = mxGetDimensions(prhs[0])[0];
   const int dim = mxGetDimensions(prhs[0])[1];
     
@@ -114,40 +113,70 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // Allocate shared memory for all threads
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
+  // mutex print_mutex;
+
   auto iterate = [&]() {
     // Allocate local memory for each thread
-
+    // chrono :: duration <double> elapsed;
+    
     double *delta_z = new double [dim];
+    double *old_mean_z = new double [dim];
+    double *old_z_ik = new double [dim];
     
     while (itr_ctr.load() > 0) {
 
       int ik = intRand(0, n - 1);
 
-      // Calculation for delta_z_ik
-      grad_fi(delta_z, mean_z, x_v[ik], y[ik], s, dim);
-      for (int c =  0; c < dim; c++) {
-	delta_z[c] = mean_z[c].load() - z_v[ik][c].load() - 1.0/ alpha/ s * delta_z[c]; 
-      }  // Now delta_z is delta_z_ik
+      // Read once - for optimizing purpose
+      for (int c = 0; c < dim; c++) {
+	old_mean_z[c] = mean_z[c].load();
+	old_z_ik[c] = z_v[ik][c].load();
+      }
 
+      // Calculation for delta_z_ik
+      double exptemp,utemp;
+      for (int c = 0; c < dim; c++) {
+	// auto start = chrono::high_resolution_clock::now();
+	utemp = y[ik] * dot(old_mean_z, x_v[ik], dim);	
+	// auto end = chrono::high_resolution_clock::now();
+	// elapsed += end - start;
+	exptemp = exp(utemp);
+	delta_z[c] = -1.0 / (1+ exptemp) * y[ik] * x_v[ik][c] + s * old_mean_z[c];
+      }
+
+      for (int c =  0; c < dim; c++) {
+    	delta_z[c] = old_mean_z[c] - old_z_ik[c] - 1.0/ alpha/ s * delta_z[c]; 
+      }  // Now delta_z is delta_z_ik
+  
       // update z_v[ik]
-      atomic_vector_increment(z_v[ik], delta_z, dim);
+      for (int c = 0; c < dim; c++)
+	atomic_double_fetch_add (z_v[ik][c], delta_z[c]);
 
       // increament mean_z
       for (int c = 0; c < dim; c++)
-	atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
+    	atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
       
       // update iteration counter
       itr_ctr--;
     }
+    
+    // { // Timing
+    //   lock_guard <mutex> lck(print_mutex);
+    //   std::cout << "elapsed time: " << elapsed.count() << " s\n";
+    //   // std::cout << "delta elapsed time: " << elapsed_delta.count() << " s\n";
+    // }
+    
     delete[] delta_z;
   };
 
+  
   vector <thread> threads;
   for (int i = 0; i < num_thread; i++) {
     threads.push_back(thread(iterate));
   }
   for (auto& t: threads) t.join();
 
+  
   // MATLAB Output 
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
   double * ptr = mxGetPr(plhs[0]);
@@ -165,8 +194,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     delete [] z_v[i];
   delete []z_v;
   
-  atomic <double> test;
-  cout << boolalpha
-       <<"atomic <double>  is lock free? "
-       << test.is_lock_free() << '\n';
+  // atomic <double> test;
+  // cout << boolalpha
+  //      <<"atomic <double>  is lock free? "
+  //      << test.is_lock_free() << '\n';
 }
