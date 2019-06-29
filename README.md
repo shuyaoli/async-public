@@ -1,6 +1,8 @@
 # Compile
 Use ```mex CXXFLAGS="\$CXXFLAGS -std=c++17 -latomic" <FILENAME>.cpp``` to compile ```<FILENAME>.cpp``` from MATLAB, e.g.
 
+Note: std::chrono::high_resolution_clock is only available in C++17
+
 ```mex CXXFLAGS="\$CXXFLAGS -std=c++17 -latomic" Finito_multi_threaded.cpp``` compiles ```Finito_multi_threaded.cpp```
 
 # Run MATLAB

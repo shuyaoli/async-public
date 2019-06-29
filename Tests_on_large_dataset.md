@@ -8,8 +8,13 @@ epoch = 15.
 
 Note that result won't converge for this much epoch.
 
-# Async_lock_free (199s in total with reading old_mean, or old_z_ik, 202.7 without it)
+# Async_lock_free 
+## Runtime:
+199.5s in total with reading old_mean, or old_z_ik, or manually write ```dot``` functions inline.
 
+202.7 without it (VANILLA). Significantly longer time if write ```dot``` inline.
+
+## Timing portions of codes (VANILLA implementation):
 Roughly takes 0.54s to enter loop.
 
 Each thread takes 200.98s / 203.3s to calculate gradient
@@ -17,15 +22,31 @@ Each thread takes 200.98s / 203.3s to calculate gradient
 Each thread takes 201s / 207 s to calculate dot product in gradient 
 
 Each thread takes 0.436s / 203.3s to calculate delta_z
+## Timing portions of codes (dot inline, read old implementation)
+
+Each thread takes 197/ 203.5s to calculate dot product.
+
+Each thread takes 199/203.5s to calculate gradient.
+
+Each thread takes 1.44/199s to calculate delta and fetch_add.
+
 
 # Async_lock_mean (200.8s in total)
 Lock both mean and z_ik. Mean and z are also stored using atomic
-library for comparison. But they will be read into double for
-calculation. 
+library. But they will be read into double for calculation.
 
-Each thread takes 4s shorter to calcuate the dot product due to
-<atomic> overhead.
+Each thread runs 4s faster to calcuate the dot product, SURPRISE? (possibly due to <atomic> overhead)
 
 Interestingly, reading (old) data only takes 0.5s for each thread in
 total.
+
+# Sync parallel
+## Runtime varies a lot, from 200s to 210s
+Same time as in async to calculate grad & delta (199s)
+
+The other time is used for waiting
+
+0.70.4s/ 0.7s/ 0s for reading sync
+
+6.5s for sync between iterations
 
