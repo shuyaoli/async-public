@@ -129,40 +129,46 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       int ik = intRand(0, n - 1);
 
       // Read once - for optimizing purpose
+
+      // XXX why interleave as opposed to doing two separte for loops?
+      // Since reading contiguous memory is more efficient, two separate
+      // for loops may be more efficient. Test it out. XXX
       for (int c = 0; c < dim; c++) {
-	old_mean_z[c] = mean_z[c].load();
-	old_z_ik[c] = z_v[ik][c].load();
+        old_mean_z[c] = mean_z[c].load();
+        old_z_ik[c] = z_v[ik][c].load();
       }
 
       // Calculation for delta_z_ik
       double exptemp,utemp;
       double dot;
       for (int c = 0; c < dim; c++) {
-
-	dot = 0;
-	for (int i = 0; i < dim; i++) {
-	  dot += old_mean_z[i] * x_v[ik][i];
-	}
-	utemp = y[ik] * dot;
-	// utemp = y[ik] * dot(old_mean_z, x_v[ik], dim);	
-
-	exptemp = exp(utemp);
-	delta_z[c] = -1.0 / (1+ exptemp) * y[ik] * x_v[ik][c] + s * old_mean_z[c];
-
+        dot = 0;
+        // XXX this dot product should be computed outside of this
+        // for loop so that it's computed only once. There is no reason
+        // to have a double for loop. Is this computation also inefficient
+        // for the synchronous version as well?
+        for (int i = 0; i < dim; i++) 
+          dot += old_mean_z[i] * x_v[ik][i];
+        
+        utemp = y[ik] * dot;
+        // utemp = y[ik] * dot(old_mean_z, x_v[ik], dim);	
+        
+        exptemp = exp(utemp);
+        delta_z[c] = -1.0 / (1+ exptemp) * y[ik] * x_v[ik][c] + s * old_mean_z[c];
       }
 
 
-      for (int c =  0; c < dim; c++) {
-    	delta_z[c] = old_mean_z[c] - old_z_ik[c] - 1.0/ alpha/ s * delta_z[c]; 
-      }  // Now delta_z is delta_z_ik
+      for (int c =  0; c < dim; c++) 
+        delta_z[c] = old_mean_z[c] - old_z_ik[c] - 1.0/ alpha/ s * delta_z[c]; 
+      // Now delta_z is delta_z_ik
   
       // update z_v[ik]
       for (int c = 0; c < dim; c++)
-	atomic_double_fetch_add (z_v[ik][c], delta_z[c]);
+        atomic_double_fetch_add (z_v[ik][c], delta_z[c]);
 
-      // increament mean_z
+      // increment mean_z
       for (int c = 0; c < dim; c++)
-    	atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
+        atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
       
       // update iteration counter
       itr_ctr--;

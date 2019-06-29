@@ -36,7 +36,7 @@ void atomic_double_fetch_add (atomic <double> &p, double a) {
   double old = p.load();
   double desired;
   do {
-    desired = old + a
+    desired = old + a;
   } while(!p.compare_exchange_weak(old, desired));
 }
 
@@ -129,8 +129,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   //() at end is to "value-initialize", i.e., initialize all element to 0
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
-  //iterate is a lambda expression with by-reference (&) capture mode.
-  //outside variables referenced in lambda body is accessed by reference
+  // Prepare threads
+  // iterate is a lambda expression with by-reference (&) capture mode
+  // outside variables referenced in lambda body is accessed by reference
   auto iterate = [&]() {
     // Allocate local memory for each thread
     double *old_mean_z = new double [dim];
@@ -194,7 +195,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }
       else
         read_notify_lck.unlock();
-      
+	
+
       unique_lock <mutex> read_lck(read_mutex);
       read_cv.wait(read_lck, [&read_ctr, num_thread]{
       	  return read_ctr.load() == num_thread;
@@ -212,8 +214,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       /**********************SYNCHRONIZATION***************************/
       /****************************************************************/
       unique_lock <mutex> notify_lck(sync_mutex);
-      int ctr = sync_ctr.load();
+      int ctr = sync_ctr.load(); //XXX why do you need ctr? why not just have this inline next line? XXX
       sync_ctr.store((ctr+1) % num_thread);
+	  
+	  //if statement executes by the slowest thread to arrive here
       if (sync_ctr.load()==0) {
         /****************************************************************/
         /*Whatever should be executed only once for each batch iteration*/
@@ -230,7 +234,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       unique_lock <mutex> lck(sync_mutex);
 
       sync_cv.wait(lck, [&sync_ctr](){
-        return sync_ctr.load()==0; // do NOT lock before compare
+        return sync_ctr.load()==0; // do NOT lock before compare XXX what does this mean? XXX
         });
     
       lck.unlock();
@@ -240,11 +244,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     delete[] old_mean_z;
   };
 
+  // Execute threads
   vector <thread> threads;
-  for (int i = 0; i < num_thread; i++) {
+  for (int i = 0; i < num_thread; i++)
     threads.push_back(thread(iterate));
-  }
-  
   for (auto& t: threads) t.join();
 
   // MATLAB Output 
