@@ -16,14 +16,13 @@ using namespace std;
 int intRand(const int & min, const int & max) {
     static thread_local mt19937* generator = nullptr;
     if (!generator)
-      generator = new mt19937(clock() +
-			      hash<thread::id>()(this_thread::get_id()));
+      generator = new mt19937( clock() + hash<thread::id>()(this_thread::get_id()) );
     uniform_int_distribution<int> distribution(min, max);
     return distribution(*generator);
 }
 
 double sig (double x) {
-  return 1.0/(1 + exp(-x));
+  return 1.0/(1.0 + exp(-x));
 }
 
 double dot (double* x, double* y, int dim) {
@@ -33,13 +32,12 @@ double dot (double* x, double* y, int dim) {
   return result;
 }
 
-void atomic_double_fetch_add (atomic <double> &p,
-			      double a) {
+void atomic_double_fetch_add (atomic <double> &p, double a) {
   double old = p.load();
-  double desired = old + a;
-  while(!p.compare_exchange_weak(old, desired)) {
-    desired = old + a;
-  }
+  double desired;
+  do {
+    desired = old + a
+  } while(!p.compare_exchange_weak(old, desired));
 }
 
 // An suggested, possibly optimized version of cas;
@@ -128,8 +126,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   condition_variable sync_cv, restart_cv, read_cv;
   
   // Allocate shared memory for all threads
+  //() at end is to "value-initialize", i.e., initialize all element to 0
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
+  //iterate is a lambda expression with by-reference (&) capture mode.
+  //outside variables referenced in lambda body is accessed by reference
   auto iterate = [&]() {
     // Allocate local memory for each thread
     double *old_mean_z = new double [dim];
@@ -158,25 +159,29 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // Read mean_z
       for (int c = 0; c < dim; c++) {
-	old_mean_z[c] = mean_z[c].load();
+        old_mean_z[c] = mean_z[c].load();
       }
       read_ctr++;
       // Read is done
    
+      // XXX what is s?? XXX
       // Calculation for delta_z_ik
       grad_fi(delta_z, old_mean_z, x_v[ik], y[ik], s, dim);
-      for (int c =  0; c < dim; c++) {
-	delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
-      }  // Now delta_z is delta_z_ik
+      for (int c =  0; c < dim; c++)
+        delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c];
+      // Now delta_z is delta_z_ik
 
+      //The lock is only meaningful when multiple threads pick the same index.
+      //Should be rare when num_thread << n
+      //compound statement lets lck go out of scope (destructor called) to release lock
       { // update z_v[ik]
-	lock_guard <mutex> lck(block_mutex[ik]);
-	vector_increment(z_v[ik], delta_z, dim);
+        lock_guard <mutex> lck(block_mutex[ik]);
+        vector_increment(z_v[ik], delta_z, dim);
       }
 
-      for (int c = 0; c < dim; c++) {
-	delta_z[c] /= n;
-      } // Now delta_z is delta_mean_z
+      for (int c = 0; c < dim; c++)
+        delta_z[c] /= n;
+      // Now delta_z is delta_mean_z
       
       /****************************************************************/
       /******************SYNCHRONIZATION*******************************/
@@ -184,11 +189,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // while (read_ctr < num_thread); // equivalent busy while loop
       unique_lock <mutex> read_notify_lck(read_mutex);
       if (read_ctr.load()==num_thread) {
-	read_notify_lck.unlock();
-	read_cv.notify_all();
+        read_notify_lck.unlock();
+        read_cv.notify_all();
       }
       else
-	read_notify_lck.unlock();
+        read_notify_lck.unlock();
       
       unique_lock <mutex> read_lck(read_mutex);
       read_cv.wait(read_lck, [&read_ctr, num_thread]{
@@ -210,24 +215,24 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       int ctr = sync_ctr.load();
       sync_ctr.store((ctr+1) % num_thread);
       if (sync_ctr.load()==0) {
-	/****************************************************************/
-	/*Whatever should be executed only once for each batch iteration*/
-	/***************************************************************/
-	restart_ctr.store(num_thread - 1);
-	read_ctr.store(0);
-	/***************************************************************/
-	notify_lck.unlock();
-	sync_cv.notify_all();
-	continue;
+        /****************************************************************/
+        /*Whatever should be executed only once for each batch iteration*/
+        /***************************************************************/
+        restart_ctr.store(num_thread - 1);
+        read_ctr.store(0);
+        /***************************************************************/
+        notify_lck.unlock();
+        sync_cv.notify_all();
+        continue;
       }
       notify_lck.unlock();
       
       unique_lock <mutex> lck(sync_mutex);
 
       sync_cv.wait(lck, [&sync_ctr](){
-	  return sync_ctr.load()==0; // do NOT lock before compare
-	});
-      
+        return sync_ctr.load()==0; // do NOT lock before compare
+        });
+    
       lck.unlock();
       restart_ctr--;
     }
@@ -236,11 +241,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   };
 
   vector <thread> threads;
-
   for (int i = 0; i < num_thread; i++) {
     threads.push_back(thread(iterate));
   }
-
+  
   for (auto& t: threads) t.join();
 
   // MATLAB Output 

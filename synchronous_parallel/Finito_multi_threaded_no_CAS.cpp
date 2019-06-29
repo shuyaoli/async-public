@@ -159,7 +159,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // Read mean_z
       for (int c = 0; c < dim; c++) {
-	old_mean_z[c] = mean_z[c];
+        old_mean_z[c] = mean_z[c];
       }
       read_ctr++;
       // Read is done
@@ -167,7 +167,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // Calculation for delta_z_ik
       grad_fi(delta_z, old_mean_z, x_v[ik], y[ik], s, dim);
       for (int c =  0; c < dim; c++) {
-	delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c]; 
+        delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c];
       }  // Now delta_z is delta_z_ik
 
       { // update z_v[ik]

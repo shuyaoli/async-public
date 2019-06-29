@@ -4,8 +4,10 @@ Initialize;
 
 tic
 
-db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, 8);
-% db_trained = Finito_multi_threaded_no_CAS(x, y, alpha, s, epoch, 8);
+numthread = 8;
+
+db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, numthread);
+% db_trained = Finito_multi_threaded_no_CAS(x, y, alpha, s, epoch, numthread);
 
 toc
 

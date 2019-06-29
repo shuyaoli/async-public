@@ -8,6 +8,7 @@ function [input, output, db] = generate_dataset(n, dim, err, seed)
 %   db is the vector representing decision boundary
 %   seed controls the random number generator
 
+
 rng(seed)
 db = 2 * rand(dim,1) - 1;  % ~Unif[-1,1]
 input = 2 * rand(n,dim) - 1;  % ~Unif[-1,1]
