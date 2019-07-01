@@ -7,7 +7,7 @@ dim = 3000;
 err = 0.01; 
 
 alpha = 2;
-epoch = 15;
+epoch = 30;
 
 
 %XXX what is s? XXX 

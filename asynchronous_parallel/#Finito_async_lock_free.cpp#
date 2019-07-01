@@ -23,17 +23,6 @@ inline int intRand(const int & min, const int & max) noexcept{
   return distribution(*generator);
 }
 
-// inline double sig (double x) noexcept {
-//   return 1.0/(1 + exp(-x));
-// }
-
-// inline double dot (double* x, double* y, int dim) noexcept {
-//   double result = 0.0;
-//   for (int i = 0; i < dim; i++) 
-//     result += x[i] * y[i];
-//   return result;
-// }
-
 inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
   double old = p.load();
   double desired;
@@ -143,7 +132,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }
 
       // Calculation for delta_z_ik
-      double exptemp;
       double dot = 0;
 
       for (int i = 0; i < dim; i++) 

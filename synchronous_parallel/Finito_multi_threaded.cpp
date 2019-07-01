@@ -13,26 +13,15 @@
 
 using namespace std;
 
-int intRand(const int & min, const int & max) {
-    static thread_local mt19937* generator = nullptr;
-    if (!generator)
-      generator = new mt19937( clock() + hash<thread::id>()(this_thread::get_id()) );
-    uniform_int_distribution<int> distribution(min, max);
-    return distribution(*generator);
+inline int intRand(const int & min, const int & max) noexcept{
+  static thread_local mt19937* generator = nullptr;
+  if (!generator)
+    generator = new mt19937( clock() + hash<thread::id>()(this_thread::get_id()) );
+  uniform_int_distribution<int> distribution(min, max);
+  return distribution(*generator);
 }
 
-double sig (double x) {
-  return 1.0/(1.0 + exp(-x));
-}
-
-double dot (double* x, double* y, int dim) {
-  double result = 0.0;
-  for (int i = 0; i < dim; i++) 
-    result += x[i] * y[i];
-  return result;
-}
-
-void atomic_double_fetch_add (atomic <double> &p, double a) {
+inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept{
   double old = p.load();
   double desired;
   do {
@@ -44,7 +33,7 @@ void atomic_double_fetch_add (atomic <double> &p, double a) {
 // But for now I don't understand memory order
 
 // void atomic_double_fetch_add (atomic <double> &p,
-// 			      double a) {
+//                            double a) {
 //   double old = p.load(std::memory_order_consume);
 //   double desired = old + a;
 //   while(!p.compare_exchange_weak(old, desired,
@@ -61,12 +50,6 @@ void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
 void vector_increment(double* x, double* incr, int dim){
   for (int i = 0; i < dim; i++)
     x[i] += incr[i];
-}
-
-void grad_fi(double* result, double* w, double* xi, double yi, double s, int dim) {
-  for (int j = 0; j < dim; j++) {
-    result[j] = -sig( -yi * dot(w, xi, dim)) * yi * xi[j] + s * w[j];
-  }
 }
 
 double** array2rowvectors (const double *array, int num_row, int num_col) {
@@ -94,8 +77,8 @@ void delete_double_ptr (double **x, int M) {
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-//     Input: x, y, initial random weight phi, alpha, s, epoch
-//     Output: trained decision boundary
+  //     Input: x, y, initial random weight phi, alpha, s, epoch
+  //     Output: trained decision boundary
   const int n = mxGetDimensions(prhs[0])[0];
   const int dim = mxGetDimensions(prhs[0])[1];
     
@@ -144,16 +127,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       /****************************************************************/
       unique_lock <mutex> restart_notify_lck(restart_mutex);
       if (restart_ctr.load()==0) {
-      	restart_notify_lck.unlock();
-      	restart_cv.notify_all();
+        restart_notify_lck.unlock();
+        restart_cv.notify_all();
       }
       else
-      	restart_notify_lck.unlock();
+        restart_notify_lck.unlock();
       
       unique_lock <mutex> restart_lck(restart_mutex);
       restart_cv.wait(restart_lck, [&restart_ctr]{
-      	  return restart_ctr.load() == 0;
-      	});
+          return restart_ctr.load() == 0;
+        });
       restart_lck.unlock();
       /*****************************START*****************************/
       int ik = intRand(0, n - 1);
@@ -167,18 +150,25 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
    
       // XXX what is s?? XXX
       // Calculation for delta_z_ik
-      grad_fi(delta_z, old_mean_z, x_v[ik], y[ik], s, dim);
-      for (int c =  0; c < dim; c++)
-        delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * delta_z[c];
+      double dot = 0;
+
+      for (int i = 0; i < dim; i++) 
+        dot += old_mean_z[i] * x_v[ik][i];
+      
+      for (int c =  0; c < dim; c++) 
+        delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
       // Now delta_z is delta_z_ik
 
       //The lock is only meaningful when multiple threads pick the same index.
       //Should be rare when num_thread << n
       //compound statement lets lck go out of scope (destructor called) to release lock
-      { // update z_v[ik]
-        lock_guard <mutex> lck(block_mutex[ik]);
-        vector_increment(z_v[ik], delta_z, dim);
+       // update z_v[ik]
+      block_mutex[ik].lock();
+      for (int c = 0; c < dim; c++) {
+        z_v[ik][c] += delta_z[c];
       }
+      block_mutex[ik].unlock();
+      
 
       for (int c = 0; c < dim; c++)
         delta_z[c] /= n;
@@ -195,17 +185,19 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }
       else
         read_notify_lck.unlock();
-	
+        
 
       unique_lock <mutex> read_lck(read_mutex);
       read_cv.wait(read_lck, [&read_ctr, num_thread]{
-      	  return read_ctr.load() == num_thread;
-      	});
+          return read_ctr.load() == num_thread;
+        });
       read_lck.unlock();
       /***************************************************************/
 
       // increament mean_z
-      atomic_vector_increment(mean_z, delta_z, dim);
+      for (int c = 0; c < dim; c++) {
+        atomic_double_fetch_add(mean_z[c], delta_z[c]);
+      }
 
       // update iteration counter
       itr_ctr--;
@@ -214,10 +206,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       /**********************SYNCHRONIZATION***************************/
       /****************************************************************/
       unique_lock <mutex> notify_lck(sync_mutex);
-      int ctr = sync_ctr.load(); //XXX why do you need ctr? why not just have this inline next line? XXX
-      sync_ctr.store((ctr+1) % num_thread);
-	  
-	  //if statement executes by the slowest thread to arrive here
+
+      sync_ctr.store((sync_ctr+1) % num_thread);
+         
+      //if statement executes by the slowest thread to arrive here
       if (sync_ctr.load()==0) {
         /****************************************************************/
         /*Whatever should be executed only once for each batch iteration*/
@@ -234,7 +226,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       unique_lock <mutex> lck(sync_mutex);
 
       sync_cv.wait(lck, [&sync_ctr](){
-        return sync_ctr.load()==0; // do NOT lock before compare XXX what does this mean? XXX
+          return sync_ctr.load()==0; // do NOT lock before compare XXX what does this mean? XXX
         });
     
       lck.unlock();
