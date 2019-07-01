@@ -51,4 +51,6 @@ Note that result won't converge for this much epoch.
  0.70.4s/ 0.7s/ 0s for reading sync
 
  6.5s for sync between iterations
+* July 1
+```dot``` was found to be significantly inefficient
 
