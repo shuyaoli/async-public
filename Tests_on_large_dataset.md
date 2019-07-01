@@ -35,7 +35,7 @@ Each thread takes 1.44/199s to calculate delta and fetch_add.
 Lock both mean and z_ik. Mean and z are also stored using atomic
 library. But they will be read into double for calculation.
 
-Each thread runs 4s faster to calcuate the dot product, SURPRISE? (possibly due to <atomic> overhead)
+Each thread runs 4s faster to calcuate the dot product, UNEXPECTED. (Possibly due to <atomic> overhead)
 
 Interestingly, reading (old) data only takes 0.5s for each thread in
 total.
