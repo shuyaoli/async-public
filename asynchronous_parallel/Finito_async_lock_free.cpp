@@ -111,8 +111,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     chrono :: duration <double> elapsed;
     
     double *delta_z = new double [dim];
-    double *old_mean_z = new double [dim];
-    double *old_z_ik = new double [dim];
+    // double *old_mean_z = new double [dim];
+    // double *old_z_ik = new double [dim];
     
     while (itr_ctr.load() > 0) {
 
@@ -123,34 +123,42 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // XXX why interleave as opposed to doing two separte for loops?
       // Since reading contiguous memory is more efficient, two separate
       // for loops may be more efficient. Test it out. XXX
-      auto start = chrono::high_resolution_clock::now();
-      for (int c = 0; c < dim; c++) {
-        old_mean_z[c] = mean_z[c].load();
-      }
 
-      for (int c = 0; c < dim; c++) {
-        old_z_ik[c] = z_v[ik][c].load();
-      }
-      auto end = chrono::high_resolution_clock::now();
+      // for (int c = 0; c < dim; c++) {
+      //   old_mean_z[c] = mean_z[c].load();
+      // }
+
+      // for (int c = 0; c < dim; c++) {
+      //   old_z_ik[c] = z_v[ik][c].load();
+      // }
+
+
       // Calculation for delta_z_ik
-      // double dot = 0;
 
-      // for (int i = 0; i < dim; i++) 
-      //   dot += old_mean_z[i] * x_v[ik][i];
-      
-      // for (int c =  0; c < dim; c++) 
-      //   delta_z[c] = old_mean_z[c] - old_z_ik[c] - 1.0/ alpha/ s * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
-      // // Now delta_z is delta_z_ik
-  
-      // // update z_v[ik]
-      // for (int c = 0; c < dim; c++)
-      //   atomic_double_fetch_add (z_v[ik][c], delta_z[c]);
+      double dot = 0;
 
-      // // increment mean_z
-      // for (int c = 0; c < dim; c++)
-      //   atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
+      for (int i = 0; i < dim; i++) 
+        dot += mean_z[i] * x_v[ik][i];
+
+
+      for (int c =  0; c < dim; c++) 
+        delta_z[c] = mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * mean_z[c]);
+      // Now delta_z is delta_z_i
+
+
+      // update z_v[ik]
+
+
+      for (int c = 0; c < dim; c++)
+        atomic_double_fetch_add (z_v[ik][c], delta_z[c]);
       
+      auto start = chrono::high_resolution_clock::now();
+      // increment mean_z
+      for (int c = 0; c < dim; c++)
+        atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
+
       // update iteration counter
+      auto end = chrono::high_resolution_clock::now();
       itr_ctr--;
 
       elapsed += end - start;

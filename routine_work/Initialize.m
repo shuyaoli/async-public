@@ -2,8 +2,8 @@ clear;
 seed = 1;
 rng(seed);
 
-n = 5000; 
-dim = 10000; 
+n = 10000; 
+dim = 7000; 
 err = 0.01; 
 
 alpha = 2;
