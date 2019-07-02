@@ -2,7 +2,7 @@ function out = f(w, x, y, s)
 % out = f(w, x, y, s), sum of fi, NOT divided by n
 
 
-% Is this separate function file necessary? where is f(...) used?
+% XXX Is this separate function file necessary? where is f(...) used? XXX
 
 sigmoid = @(x) 1./(1 + exp(-x));
 
