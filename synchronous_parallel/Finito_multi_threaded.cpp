@@ -153,10 +153,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // XXX what is s?? XXX
       // Calculation for delta_z_ik
       double dot = 0;
-
+      
+      //dot = old_mean_z^T * x_v
       for (int i = 0; i < dim; i++) 
         dot += old_mean_z[i] * x_v[ik][i];
       
+      //delta_z = bar{z} - z_ikn - alpha/s ... XXX
       for (int c =  0; c < dim; c++) 
         delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
       // Now delta_z is delta_z_ik
