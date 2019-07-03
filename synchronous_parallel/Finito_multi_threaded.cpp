@@ -122,6 +122,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     double *delta_z = new double [dim];
     
     while (itr_ctr.load() > 0) {
+      // XXX If we move the synchronization code at the of while loop
+      // the code before "START" is unnecessary (I think) XXX
       // while(restart_ctr.load() > 0); //equivalent busy while loop
       /****************************************************************/
       /******************SYNCHRONIZATION*******************************/
@@ -152,10 +154,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // XXX what is s?? XXX
       // Calculation for delta_z_ik
       double dot = 0;
-
+      
+      //dot = old_mean_z^T * x_v
       for (int i = 0; i < dim; i++) 
         dot += old_mean_z[i] * x_v[ik][i];
       
+      //delta_z = bar{z} - z_ikn - alpha/s ... XXX
       for (int c =  0; c < dim; c++) 
         delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
       // Now delta_z is delta_z_ik
@@ -179,6 +183,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       /******************SYNCHRONIZATION*******************************/
       /***************************************************************/
       // while (read_ctr < num_thread); // equivalent busy while loop
+      
+      //XXX Can this be done with a single object?
+      //There are 3 parts to this synchronization
+      // 1. Set counter to 0
+      // 2. atomically increment after read
+      // 3. Wait until everything has completed read
+      //    These 3 could be made into 3 member function calls. XXX
       unique_lock <mutex> read_notify_lck(read_mutex);
       if (read_ctr.load()==num_thread) {
         read_notify_lck.unlock();
@@ -203,6 +214,15 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // update iteration counter
       itr_ctr--;
       
+      //XXX can this synchronozation be moved to the beginning of the whie loop? XXX
+      //XXX Can this be done with a single object?
+      //There are 3 parts to this synchronization
+      // 1. Every thread waits for slowest thread
+      // 2. Slowest thread executes some code
+      //     ("some code" can be done with lambda expression with by-reference (&) capture mode)
+      // 3. All threads resume
+      //    These 3 could be made into 3 member function calls. XXX
+      // The two synchronization features can be done with a single object.
       /****************************************************************/
       /**********************SYNCHRONIZATION***************************/
       /****************************************************************/

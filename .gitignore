@@ -1,4 +1,5 @@
 .DS_Store
 .DS_Store?
-*.mexw64
+*.mexa64
 *~
+\#*#
