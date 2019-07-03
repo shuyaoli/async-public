@@ -21,12 +21,12 @@ inline int intRand(const int & min, const int & max) noexcept{
   return distribution(*generator);
 }
 
-// This is not fetch add!
+// YYY This is not fetch add!YYY
 inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept{
   double old = p.load();
   double desired;
   do {
-    desired = old + a; // Can be inlined into next line without optimization
+    desired = old + a; // YYY Can be inlined into next line without optimization
   } while(!p.compare_exchange_weak(old, desired));
 }
 
