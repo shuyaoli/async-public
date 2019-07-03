@@ -1,4 +1,6 @@
 addpath('../routine_work/');
+Initialize;
+
 cvx_begin
     variable w(dim)
     minimize f(w, x, y, s)
