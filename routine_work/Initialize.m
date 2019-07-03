@@ -2,17 +2,17 @@ clear;
 seed = 1;
 rng(seed);
 
-n = 10000; 
-dim = 7000; 
+n = 500; 
+dim = 3; 
 err = 0.01; 
 
-alpha = 2;
-epoch = 30;
+alpha = 1200;
+epoch = 45;
 
 
 %XXX what is s? XXX 
 %XXX what is toMEX? XXX
-s = 1; % function to be optimized, toMEX
+s = 0; % function to be optimized, toMEX
 
 [x, y, db] = generate_dataset(n, dim, err, seed); 
 % x = 0.1 .* x;
