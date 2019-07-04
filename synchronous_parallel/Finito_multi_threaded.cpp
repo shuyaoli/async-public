@@ -122,6 +122,52 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     double *delta_z = new double [dim];
     
     while (itr_ctr.load() > 0) {
+
+      // update iteration counter
+      itr_ctr--;
+      
+      //XXX can this synchronozation be moved to the beginning of the whie loop? XXX
+      //XXX Can this be done with a single object?
+      //There are 3 parts to this synchronization
+      // 1. Every thread waits for slowest thread
+      // 2. Slowest thread executes some code
+      //     ("some code" can be done with lambda expression with by-reference (&) capture mode)
+      // 3. All threads resume
+      //    These 3 could be made into 3 member function calls. XXX
+      // The two synchronization features can be done with a single object.
+      /****************************************************************/
+      /**********************SYNCHRONIZATION***************************/
+      /****************************************************************/
+      sync_mutex.lock();
+
+      sync_ctr.store((sync_ctr+1) % num_thread);
+         
+      //if statement executes by the slowest thread to arrive here
+      if (sync_ctr.load()==0) {
+        /****************************************************************/
+        /*Whatever should be executed only once for each batch i/teration*/
+        /***************************************************************/
+        restart_ctr.store(num_thread - 1);
+        read_ctr.store(0);
+        /***************************************************************/
+        notify_lck.unlock();
+        sync_cv.notify_all();
+      }
+
+      else {
+        sync_mutex.unlock();
+      
+        unique_lock <mutex> lck(sync_mutex);
+
+        sync_cv.wait(lck, [&sync_ctr](){
+                            return sync_ctr.load()==0; // do NOT lock before compare XXX what does this mean? XXX
+                          });
+    
+        lck.unlock();
+        restart_ctr--;
+      }
+
+      
       // XXX If we move the synchronization code at the of while loop
       // the code before "START" is unnecessary (I think) XXX
       // while(restart_ctr.load() > 0); //equivalent busy while loop
@@ -211,47 +257,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         atomic_double_fetch_add(mean_z[c], delta_z[c]);
       }
 
-      // update iteration counter
-      itr_ctr--;
-      
-      //XXX can this synchronozation be moved to the beginning of the whie loop? XXX
-      //XXX Can this be done with a single object?
-      //There are 3 parts to this synchronization
-      // 1. Every thread waits for slowest thread
-      // 2. Slowest thread executes some code
-      //     ("some code" can be done with lambda expression with by-reference (&) capture mode)
-      // 3. All threads resume
-      //    These 3 could be made into 3 member function calls. XXX
-      // The two synchronization features can be done with a single object.
-      /****************************************************************/
-      /**********************SYNCHRONIZATION***************************/
-      /****************************************************************/
-      unique_lock <mutex> notify_lck(sync_mutex);
 
-      sync_ctr.store((sync_ctr+1) % num_thread);
-         
-      //if statement executes by the slowest thread to arrive here
-      if (sync_ctr.load()==0) {
-        /****************************************************************/
-        /*Whatever should be executed only once for each batch iteration*/
-        /***************************************************************/
-        restart_ctr.store(num_thread - 1);
-        read_ctr.store(0);
-        /***************************************************************/
-        notify_lck.unlock();
-        sync_cv.notify_all();
-        continue;
-      }
-      notify_lck.unlock();
-      
-      unique_lock <mutex> lck(sync_mutex);
-
-      sync_cv.wait(lck, [&sync_ctr](){
-          return sync_ctr.load()==0; // do NOT lock before compare XXX what does this mean? XXX
-        });
-    
-      lck.unlock();
-      restart_ctr--;
     }
     delete[] delta_z;
     delete[] old_mean_z;
