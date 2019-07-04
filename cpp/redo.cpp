@@ -31,16 +31,12 @@ int main () {
   auto iterate = [&]() {
 
     while (true) {
-      // while (restart_ctr != 0) {} // 
-      
+
       { //debugging purpose
 	lock_guard <mutex> lck(print_mutex);
-	cout << this_thread::get_id() << " start\n";
+	cout << this_thread::get_id() << " start loop\n";
       }
-      std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
-      // do some work
       
-
       sync_mutex.lock();
       int ctr = thread_counter_sync.load();
 	
@@ -67,7 +63,7 @@ int main () {
       }
       else {
         sync_mutex.unlock();
-  
+ 
         { //debugging purpose
           lock_guard <mutex> lck(print_mutex);
           cout << this_thread::get_id() << " put to sleep at place "
@@ -82,7 +78,7 @@ int main () {
                               cout << this_thread::get_id()<< " wait status "
                                    <<(thread_counter_sync.load())<<endl;
                             }   
-                            return thread_counter_sync.load()==0; // do NOT lock before compare
+                            return thread_counter_sync.load()==0; 
                           });
       
         lck.unlock();
@@ -93,6 +89,9 @@ int main () {
                << restart_ctr.load() <<endl;
         }
       }
+      //work start here
+      while (restart_ctr != 0) {}
+      // std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
     }};
 
 
