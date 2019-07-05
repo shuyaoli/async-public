@@ -116,6 +116,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
     while (itr_ctr.load() > 0) {
 
+      
       int ik = intRand(0, n - 1);
 
       // Read once - for optimizing purpose

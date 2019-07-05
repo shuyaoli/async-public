@@ -13,6 +13,57 @@
 
 using namespace std;
 
+class Barrier {
+private:
+  int _ctr;
+  mutex _mutex;
+  condition_variable _cv;
+public:
+  Barrier (int = 0);
+  void _modulo_increment(int);
+  void _synchronize ();
+  void _incr_and_synchronize(int); // combine above two, but with one lock
+};
+
+Barrier::Barrier (int _init) {
+  _ctr = _init;
+}
+
+void Barrier:: _modulo_increment(int _num_thread) {
+  _mutex.lock();
+  _ctr = (_ctr + 1) % _num_thread;
+  _mutex.unlock();
+}
+
+void Barrier:: _synchronize() {
+  _mutex.lock();
+  if (_ctr == 0) {
+    _mutex.unlock();
+    _cv.notify_all();
+  }
+  else {
+    _mutex.unlock();
+    unique_lock <mutex> lck (_mutex);
+    _cv.wait(lck, [this](){return _ctr == 0;}); //strange capture pointer
+    lck.unlock();
+  }
+}
+
+void Barrier:: _incr_and_synchronize(int _num_thread) {
+  _mutex.lock();
+  _ctr = (_ctr + 1) % _num_thread;
+  if (_ctr == 0) {
+    _mutex.unlock();
+    _cv.notify_all();
+  }
+  else {
+    _mutex.unlock();
+    unique_lock <mutex> lck (_mutex);
+    _cv.wait(lck, [this](){return _ctr == 0;}); //strange capture pointer
+    lck.unlock();
+  }
+}
+
 inline int intRand(const int & min, const int & max) noexcept{
   static thread_local mt19937* generator = nullptr;
   if (!generator)
@@ -21,8 +72,7 @@ inline int intRand(const int & min, const int & max) noexcept{
   return distribution(*generator);
 }
 
-// This is not fetch add!
-inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept{
+inline void atomic_double_add (atomic <double> &p, double a) noexcept{
   double old = p.load();
   double desired;
   do {
@@ -33,7 +83,7 @@ inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept{
 // An suggested, possibly optimized version of cas;
 // But for now I don't understand memory order
 
-// void atomic_double_fetch_add (atomic <double> &p,
+// void atomic_double_add (atomic <double> &p,
 //                            double a) {
 //   double old = p.load(std::memory_order_consume);
 //   double desired = old + a;
@@ -45,7 +95,7 @@ inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept{
 
 void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
   for (int i = 0; i < dim; i++)
-    atomic_double_fetch_add (x[i], incr[i]);
+    atomic_double_add (x[i], incr[i]);
 }
 
 void vector_increment(double* x, double* incr, int dim){
@@ -97,17 +147,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     z_v[r] = new double [dim] ();
   }
 
-  atomic_int sync_ctr(0), restart_ctr(0); // For synchronization
   atomic_int itr_ctr(epoch * n); // Tracking iteration
-  atomic_int read_ctr(0);  // Make sure write is done after read
-
-  // mutex print_mutex; // debugging purpose
-  mutex sync_mutex; 
-  mutex restart_mutex;
-  mutex read_mutex;
+  
+  Barrier read_barrier(0), itr_barrier(0);
   mutex* block_mutex = new mutex [n];
-    
-  condition_variable sync_cv, restart_cv, read_cv;
   
   // Allocate shared memory for all threads
   //() at end is to "value-initialize", i.e., initialize all element to 0
@@ -125,68 +168,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
       // update iteration counter
       itr_ctr--;
-      
-      //XXX can this synchronozation be moved to the beginning of the whie loop? XXX
-      //XXX Can this be done with a single object?
-      //There are 3 parts to this synchronization
-      // 1. Every thread waits for slowest thread
-      // 2. Slowest thread executes some code
-      //     ("some code" can be done with lambda expression with by-reference (&) capture mode)
-      // 3. All threads resume
-      //    These 3 could be made into 3 member function calls. XXX
-      // The two synchronization features can be done with a single object.
-      /****************************************************************/
-      /**********************SYNCHRONIZATION***************************/
-      /****************************************************************/
-      sync_mutex.lock();
 
-      sync_ctr.store((sync_ctr+1) % num_thread);
-         
-      //if statement executes by the slowest thread to arrive here
-      if (sync_ctr.load()==0) {
-        /****************************************************************/
-        /*Whatever should be executed only once for each batch i/teration*/
-        /***************************************************************/
-        restart_ctr.store(num_thread - 1);
-        read_ctr.store(0);
-        /***************************************************************/
-        notify_lck.unlock();
-        sync_cv.notify_all();
-      }
-
-      else {
-        sync_mutex.unlock();
-      
-        unique_lock <mutex> lck(sync_mutex);
-
-        sync_cv.wait(lck, [&sync_ctr](){
-                            return sync_ctr.load()==0; // do NOT lock before compare XXX what does this mean? XXX
-                          });
-    
-        lck.unlock();
-        restart_ctr--;
-      }
-
-      
-      // XXX If we move the synchronization code at the of while loop
-      // the code before "START" is unnecessary (I think) XXX
-      // while(restart_ctr.load() > 0); //equivalent busy while loop
-      /****************************************************************/
-      /******************SYNCHRONIZATION*******************************/
-      /****************************************************************/
-      unique_lock <mutex> restart_notify_lck(restart_mutex);
-      if (restart_ctr.load()==0) {
-        restart_notify_lck.unlock();
-        restart_cv.notify_all();
-      }
-      else
-        restart_notify_lck.unlock();
-      
-      unique_lock <mutex> restart_lck(restart_mutex);
-      restart_cv.wait(restart_lck, [&restart_ctr]{
-          return restart_ctr.load() == 0;
-        });
-      restart_lck.unlock();
+      itr_barrier._incr_and_synchronize(num_thread);
       /*****************************START*****************************/
       int ik = intRand(0, n - 1);
 
@@ -194,7 +177,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       for (int c = 0; c < dim; c++) {
         old_mean_z[c] = mean_z[c].load();
       }
-      read_ctr++;
+
+      read_barrier._modulo_increment(num_thread);
       // Read is done
    
       // XXX what is s?? XXX
@@ -207,57 +191,29 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
       //delta_z = bar{z} - z_ikn - alpha/s ... XXX
       for (int c =  0; c < dim; c++) 
-        delta_z[c] = old_mean_z[c] - z_v[ik][c] - 1.0/ alpha/ s * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
+        delta_z[c] = old_mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
       // Now delta_z is delta_z_ik
 
       //The lock is only meaningful when multiple threads pick the same index.
       //Should be rare when num_thread << n
-      //compound statement lets lck go out of scope (destructor called) to release lock
-       // update z_v[ik]
+
+      // update z_v[ik]
       block_mutex[ik].lock();
       for (int c = 0; c < dim; c++) {
         z_v[ik][c] += delta_z[c];
       }
       block_mutex[ik].unlock();
       
-
-      for (int c = 0; c < dim; c++)
-        delta_z[c] /= n;
-      // Now delta_z is delta_mean_z
-      
       /****************************************************************/
       /******************SYNCHRONIZATION*******************************/
       /***************************************************************/
-      // while (read_ctr < num_thread); // equivalent busy while loop
-      
-      //XXX Can this be done with a single object?
-      //There are 3 parts to this synchronization
-      // 1. Set counter to 0
-      // 2. atomically increment after read
-      // 3. Wait until everything has completed read
-      //    These 3 could be made into 3 member function calls. XXX
-      unique_lock <mutex> read_notify_lck(read_mutex);
-      if (read_ctr.load()==num_thread) {
-        read_notify_lck.unlock();
-        read_cv.notify_all();
-      }
-      else
-        read_notify_lck.unlock();
-        
-
-      unique_lock <mutex> read_lck(read_mutex);
-      read_cv.wait(read_lck, [&read_ctr, num_thread]{
-          return read_ctr.load() == num_thread;
-        });
-      read_lck.unlock();
+      read_barrier._synchronize();
       /***************************************************************/
 
       // increament mean_z
       for (int c = 0; c < dim; c++) {
-        atomic_double_fetch_add(mean_z[c], delta_z[c]);
+        atomic_double_add(mean_z[c], delta_z[c] / n);
       }
-
-
     }
     delete[] delta_z;
     delete[] old_mean_z;

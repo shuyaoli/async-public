@@ -11,8 +11,8 @@ using namespace std;
 int main () {
   int num_thread = 3;
   atomic_int thread_counter_sync(0), restart_ctr(0);
-  mutex sync_mutex, print_mutex;
-  condition_variable sync_cv;
+  mutex sync_mutex, print_mutex, restart_mutex;
+  condition_variable sync_cv, restart_cv;
   
   // auto safe_compare = [&](atomic_int& n, int val, mutex& mtx) {
   //   { //debugging purpose
@@ -52,12 +52,7 @@ int main () {
           lock_guard <mutex> lck(print_mutex);
           cout << this_thread::get_id() << " notify to wake up\n";
         }
-        restart_ctr.store(num_thread - 1);
-        {
-          lock_guard <mutex> lck(print_mutex);
-          cout << this_thread::get_id() <<" set restart_ctr to "
-               << restart_ctr.load() <<endl;
-        }
+
         sync_cv.notify_all();
         sync_mutex.unlock();
       }
@@ -82,15 +77,42 @@ int main () {
                           });
       
         lck.unlock();
-        restart_ctr--;
         {
           lock_guard <mutex> lck(print_mutex);
           cout << this_thread::get_id() <<" dec restart_ctr to "
                << restart_ctr.load() <<endl;
         }
       }
+
+      restart_mutex.lock();
+      restart_ctr.store((restart_ctr + 1) % num_thread);
+      restart_mutex.unlock();
+      
+        {
+          lock_guard <mutex> lck(print_mutex);
+          cout << this_thread::get_id() <<" set restart_ctr to "
+               << restart_ctr.load() <<endl;
+        }
+
+
+
+
+      restart_mutex.lock();
+      if (restart_ctr.load()==0) {
+        restart_mutex.unlock();
+        restart_cv.notify_all();
+      }
+      else {
+        restart_mutex.unlock();
+      
+      
+        unique_lock <mutex> restart_lck(restart_mutex);
+        restart_cv.wait(restart_lck, [&restart_ctr]{
+            return restart_ctr.load() == 0;
+          });
+        restart_lck.unlock();
+      }
       //work start here
-      while (restart_ctr != 0) {}
       // std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
     }};
 
