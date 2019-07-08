@@ -31,6 +31,9 @@ using namespace std;
 #define num_T double
 #define IS_DOUBLE 1
 
+/*********This is a workaround to the bug of Nvidia CUDA identified at this page***********/
+/*https://stackoverflow.com/questions/37566987/cuda-atomicadd-for-doubles-definition-error*/
+
 // typedef float num_T;
 
 __global__ void parallel_sum(const num_T* __restrict__ z, num_T *x_half) {

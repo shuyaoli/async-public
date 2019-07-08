@@ -36,7 +36,7 @@ inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
 //     atomic_double_fetch_add (x[i], incr[i]);
 // }
 
-// An suggested, possibly optimized version of cas;
+// A suggested, possibly optimized version of cas;
 // But for now I don't understand memory order
 
 // void atomic_double_fetch_add (atomic <double> &p,
@@ -49,10 +49,6 @@ inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
 //   }
 // }
 
-// inline void vector_increment(double* x, double* incr, int dim) noexcept{
-//   for (int i = 0; i < dim; i++)
-//     x[i] += incr[i];
-// }
 
 inline double** array2rowvectors (const double *array, int num_row, int num_col) noexcept {
   // return a vector of row vectors, e.g.

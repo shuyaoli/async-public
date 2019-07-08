@@ -89,5 +89,5 @@ Another run gives max 6.7
 *** Not a good idea to use one single loop for updating!
 
 ** Sync
-Runtime: 28.5s, variance greather than async
+Runtime: 25s, variance much greather than async (17s - 35s)
 

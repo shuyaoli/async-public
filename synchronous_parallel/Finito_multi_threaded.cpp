@@ -11,6 +11,12 @@
 #include <random>
 #include <mex.h>
 
+/** README for code timing**/
+
+
+// For n = 10000, dim = 7000, epoch = 30, the code takes 17s - 35s to run (average ~25s)
+
+// Documented time is the averaged time taken by each thread
 using namespace std;
 
 class Barrier {
@@ -81,7 +87,7 @@ inline void atomic_double_add (atomic <double> &p, double a) noexcept{
   } while(!p.compare_exchange_weak(old, desired));
 }
 
-// An suggested, possibly optimized version of cas;
+// A suggested (from Reddit), possibly optimized version of cas;
 // But for now I don't understand memory order
 
 // void atomic_double_add (atomic <double> &p,
@@ -92,16 +98,6 @@ inline void atomic_double_add (atomic <double> &p, double a) noexcept{
 //         std::memory_order_release, std::memory_order_consume)) {
 //     desired = old + a;
 //   }
-// }
-
-// void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
-//   for (int i = 0; i < dim; i++)
-//     atomic_double_add (x[i], incr[i]);
-// }
-
-// void vector_increment(double* x, double* incr, int dim){
-//   for (int i = 0; i < dim; i++)
-//     x[i] += incr[i];
 // }
 
 double** array2rowvectors (const double *array, int num_row, int num_col) {
@@ -152,6 +148,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   Barrier read_barrier(0), itr_barrier(0);
   mutex* block_mutex = new mutex [n];
+  mutex print_mutex; // For coordinating output of different threads.
   
   // Allocate shared memory for all threads
   //() at end is to "value-initialize", i.e., initialize all element to 0
@@ -164,59 +161,68 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     // Allocate local memory for each thread
     double *old_mean_z = new double [dim];
     double *delta_z = new double [dim];
-    
-    while (itr_ctr.load() > 0) {
-
+    // chrono :: duration <double> elapsed;
+    while (itr_ctr.load() > 0) { // This loop takes 23s/25s
       // update iteration counter
       itr_ctr--;
 
-      itr_barrier.mod_incr_and_sync(num_thread);
+      itr_barrier.mod_incr_and_sync(num_thread); // 2.5s / 25s
+
       /*****************************START*****************************/
       int ik = intRand(0, n - 1);
 
-      // Read mean_z
+      // Read mean_z, 0.54s / 25s
       for (int c = 0; c < dim; c++) {
         old_mean_z[c] = mean_z[c].load();
       }
 
       // Read is done
-      read_barrier.mod_incr(num_thread);
-         
-      // f is assumed to be n * s 
-      // Calculation for delta_z_ik
+
+      read_barrier.mod_incr(num_thread); // < 0.01s
+   
+      //dot = <old_mean_z, x[ik]>, 1.3s / 25s
       double dot = 0;
-      
-      //dot = <old_mean_z, x[ik]>
       for (int i = 0; i < dim; i++) 
         dot += old_mean_z[i] * x_v[ik][i];
+
       
-      //delta_z = mean_z - z[ik] - alpha * grad_f[ik] 
+      //delta_z = mean_z - z[ik] - alpha * grad_f[ik], 11s / 25s
       for (int c =  0; c < dim; c++) 
         delta_z[c] = old_mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
+
       // Now delta_z is delta_z_ik
 
       //The lock is only meaningful when multiple threads pick the same index.
       //Should be rare when num_thread << n
 
-      // update z_v[ik]
+      // update z_v[ik], 0.84s / 24.8s
       // z[ik] += delta[z]
+ 
       block_mutex[ik].lock();
       for (int c = 0; c < dim; c++) {
         z_v[ik][c] += delta_z[c];
       }
       block_mutex[ik].unlock();
-      
 
+      // auto start = chrono::high_resolution_clock::now();
       /******************SYNCHRONIZATION*******************************/
-      read_barrier.sync();
+      read_barrier.sync(); // 0.4s / 25s
       /***************************************************************/
-
-      // increament mean_z
+      // auto end = chrono::high_resolution_clock::now();
+      
+      // increament mean_z, 5.5s / 25s
       // mean_z += delta_z / n
       for (int c = 0; c < dim; c++) {
         atomic_double_add(mean_z[c], delta_z[c] / n);
       }
+      
+      // elapsed += end - start;
     }
+    
+    // print_mutex.lock();
+    // std::cout << "C++ code elapsed time: " << elapsed.count() << " s\n";
+    // print_mutex.unlock();
+    
     delete[] delta_z;
     delete[] old_mean_z;
   };
