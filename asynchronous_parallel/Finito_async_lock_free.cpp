@@ -70,11 +70,6 @@ inline double** array2rowvectors (const double *array, int num_row, int num_col)
   return matrix;
 }
 
-// inline void grad_fi(double* result, atomic <double>* w, double* xi, double yi, double s, int dim) noexcept {
-//   for (int j = 0; j < dim; j++) {
-//     result[j] = -1.0/(1+exp(yi * dot(w, xi, dim))) * yi * xi[j] + s * w[j].load();
-//   }
-// }
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
@@ -93,22 +88,22 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
   double** x_v = array2rowvectors (x, n, dim);  //new
 
-  atomic <double>** z_v = new atomic <double>* [n];
+  double** z_v = new double* [n];
   for (int r = 0; r < n; r++) {
-    z_v[r] = new atomic <double> [dim] ();
+    z_v[r] = new double [dim] ();
   }
 
   atomic_int itr_ctr(epoch * n); // Tracking iteration
-  
+  mutex* block_mutex = new mutex [n];
   // Allocate shared memory for all threads
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
-  mutex print_mutex;
+  // mutex print_mutex;
 
   auto iterate = [&]() {
     // Allocate local memory for each thread
     
-    chrono :: duration <double> elapsed;
+    // chrono :: duration <double> elapsed;
     
     double *delta_z = new double [dim];
     // double *old_mean_z = new double [dim];
@@ -119,57 +114,44 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
       int ik = intRand(0, n - 1);
 
-      // Read once - for optimizing purpose
-
-      // XXX why interleave as opposed to doing two separte for loops?
-      // Since reading contiguous memory is more efficient, two separate
-      // for loops may be more efficient. Test it out. XXX
-
-      // for (int c = 0; c < dim; c++) {
-      //   old_mean_z[c] = mean_z[c].load();
-      // }
-
-      // for (int c = 0; c < dim; c++) {
-      //   old_z_ik[c] = z_v[ik][c].load();
-      // }
-
-
       // Calculation for delta_z_ik
 
+      //dot = <old_mean_z, x[ik]>
       double dot = 0;
-
       for (int i = 0; i < dim; i++) 
         dot += mean_z[i] * x_v[ik][i];
 
-
+      //delta_z = mean_z - z[ik] - alpha * grad_f[ik] 
       for (int c =  0; c < dim; c++) 
         delta_z[c] = mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * mean_z[c]);
       // Now delta_z is delta_z_i
 
 
       // update z_v[ik]
-
-
+      // z[ik] += delta[z]
+      block_mutex[ik].lock();
       for (int c = 0; c < dim; c++)
-        atomic_double_fetch_add (z_v[ik][c], delta_z[c]);
+        z_v[ik][c] += delta_z[c];
+      block_mutex[ik].unlock();
+      // auto start = chrono::high_resolution_clock::now();
       
-      auto start = chrono::high_resolution_clock::now();
       // increment mean_z
+      // mean_z += delta_z / n
       for (int c = 0; c < dim; c++)
         atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
 
       // update iteration counter
-      auto end = chrono::high_resolution_clock::now();
+// auto end = chrono::high_resolution_clock::now();
       itr_ctr--;
 
-      elapsed += end - start;
+      // elapsed += end - start;
 
     }
     
 
-    print_mutex.lock();
-    std::cout << "elapsed time: " << elapsed.count() << " s\n";
-    print_mutex.unlock();
+    // print_mutex.lock();
+    // std::cout << "elapsed time: " << elapsed.count() << " s\n";
+    // print_mutex.unlock();
     
     delete[] delta_z;
   };

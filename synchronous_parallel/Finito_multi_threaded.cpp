@@ -7,7 +7,7 @@
 #include <time.h>
 #include <condition_variable>
 #include <atomic>
-#include <chrono>  // debugging, set a waiting maximum
+#include <chrono>
 #include <random>
 #include <mex.h>
 
@@ -20,36 +20,37 @@ private:
   condition_variable _cv;
 public:
   Barrier (int = 0);
-  void _modulo_increment(int);
-  void _synchronize ();
-  void _incr_and_synchronize(int); // combine above two, but with one lock
+  void mod_incr(int);
+  void sync ();
+  void mod_incr_and_sync(int); // combine above two, but with one lock
 };
 
 Barrier::Barrier (int _init) {
   _ctr = _init;
 }
 
-void Barrier:: _modulo_increment(int _num_thread) {
+void Barrier:: mod_incr(int _num_thread) {
   _mutex.lock();
   _ctr = (_ctr + 1) % _num_thread;
   _mutex.unlock();
 }
 
-void Barrier:: _synchronize() {
+void Barrier:: sync() {
   _mutex.lock();
   if (_ctr == 0) {
     _mutex.unlock();
+    // Better to unlock before notifying, otherwise notified thread will wait for unlock
     _cv.notify_all();
   }
   else {
     _mutex.unlock();
     unique_lock <mutex> lck (_mutex);
-    _cv.wait(lck, [this](){return _ctr == 0;}); //strange capture pointer
+    _cv.wait(lck, [this](){return _ctr == 0;});
     lck.unlock();
   }
 }
 
-void Barrier:: _incr_and_synchronize(int _num_thread) {
+void Barrier:: mod_incr_and_sync(int _num_thread) {
   _mutex.lock();
   _ctr = (_ctr + 1) % _num_thread;
   if (_ctr == 0) {
@@ -93,15 +94,15 @@ inline void atomic_double_add (atomic <double> &p, double a) noexcept{
 //   }
 // }
 
-void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
-  for (int i = 0; i < dim; i++)
-    atomic_double_add (x[i], incr[i]);
-}
+// void atomic_vector_increment(atomic <double> x[], double incr[], int dim){
+//   for (int i = 0; i < dim; i++)
+//     atomic_double_add (x[i], incr[i]);
+// }
 
-void vector_increment(double* x, double* incr, int dim){
-  for (int i = 0; i < dim; i++)
-    x[i] += incr[i];
-}
+// void vector_increment(double* x, double* incr, int dim){
+//   for (int i = 0; i < dim; i++)
+//     x[i] += incr[i];
+// }
 
 double** array2rowvectors (const double *array, int num_row, int num_col) {
   // return a vector of row vectors
@@ -169,7 +170,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // update iteration counter
       itr_ctr--;
 
-      itr_barrier._incr_and_synchronize(num_thread);
+      itr_barrier.mod_incr_and_sync(num_thread);
       /*****************************START*****************************/
       int ik = intRand(0, n - 1);
 
@@ -178,18 +179,18 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         old_mean_z[c] = mean_z[c].load();
       }
 
-      read_barrier._modulo_increment(num_thread);
       // Read is done
-   
-      // XXX what is s?? XXX
+      read_barrier.mod_incr(num_thread);
+         
+      // f is assumed to be n * s 
       // Calculation for delta_z_ik
       double dot = 0;
       
-      //dot = old_mean_z^T * x_v
+      //dot = <old_mean_z, x[ik]>
       for (int i = 0; i < dim; i++) 
         dot += old_mean_z[i] * x_v[ik][i];
       
-      //delta_z = bar{z} - z_ikn - alpha/s ... XXX
+      //delta_z = mean_z - z[ik] - alpha * grad_f[ik] 
       for (int c =  0; c < dim; c++) 
         delta_z[c] = old_mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
       // Now delta_z is delta_z_ik
@@ -198,19 +199,20 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       //Should be rare when num_thread << n
 
       // update z_v[ik]
+      // z[ik] += delta[z]
       block_mutex[ik].lock();
       for (int c = 0; c < dim; c++) {
         z_v[ik][c] += delta_z[c];
       }
       block_mutex[ik].unlock();
       
-      /****************************************************************/
+
       /******************SYNCHRONIZATION*******************************/
-      /***************************************************************/
-      read_barrier._synchronize();
+      read_barrier.sync();
       /***************************************************************/
 
       // increament mean_z
+      // mean_z += delta_z / n
       for (int c = 0; c < dim; c++) {
         atomic_double_add(mean_z[c], delta_z[c] / n);
       }
