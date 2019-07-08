@@ -9,7 +9,7 @@ tic
 db_trained = Finito_async_lock_free(x, y, alpha, s, epoch, 8);
 
 toc
-
+% print
 
 result = x * db_trained' > 0;
 result = 2 * result - 1;

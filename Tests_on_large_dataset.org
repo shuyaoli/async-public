@@ -59,34 +59,28 @@ Now tests are operated on data with n = 10 000, dim = 7 000
 
 
 ** Async 
-*** Load data for each iteration: 20.9s
-*** Use thread local memory: 
-20.35s, iterations take 19.34s
+
+*** runtime for each iteration: 16.8s / 18.1s
+(! Block-lock z, 3s faster than using atomic for z !)
+
 
 *** Read old data
-2 loops: 1.18 / 20.9 in total
+ABANDONED, we no longer read old data into local memory
 
-1 loop: 1.01 / 20.9 in total
+*** Compute delta
+12 / 18 is used on computing gradient
 
-*** Compute gradient 
-12.65 / 20.9 is used on computing gradient
+*** Compute dot product
+1 / 18 is used for computing dot product
 
-0.8s is used for computing dot product
-
-*** Update z[ik]
-2.8s / 20.4s in TOTAL, including when threads are waiting
+*** Update z[ik], block-locked
+0.8s / 18s in TOTAL, including when threads are waiting
 
 *** Update mean_z
 Also measured in TOTAL, including when threads are waiting
 
-Runtimes vary a lot, e.g. 
-3.0 2.8 2.8 2.7 2.5 2.5 2.6 2.8 5.5 6.0 3.0 3.0 3.1 5.7
+Runtimes vary a lot, 3.1 - 4.0s / 18s
 
-MAX is 5.7
-
-Another run gives max 6.7
-
-*** Not a good idea to use one single loop for updating!
 
 ** Sync
 Runtime: 25s, variance much greather than async (17s - 35s)

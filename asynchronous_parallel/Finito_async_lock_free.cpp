@@ -94,60 +94,63 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // Allocate shared memory for all threads
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
-  // mutex print_mutex;
+  mutex print_mutex;
 
   auto iterate = [&]() {
     // Allocate local memory for each thread
     
-    // chrono :: duration <double> elapsed;
+    chrono :: duration <double> elapsed;
     
     double *delta_z = new double [dim];
-    // double *old_mean_z = new double [dim];
-    // double *old_z_ik = new double [dim];
     
-    while (itr_ctr.load() > 0) {
-
+    while (itr_ctr.load() > 0) { // This loop takes 16.8s / 18.1s
+      auto start = chrono::high_resolution_clock::now();
       
       int ik = intRand(0, n - 1);
 
       // Calculation for delta_z_ik
 
-      //dot = <old_mean_z, x[ik]>
+      //dot = <old_mean_z, x[ik]>, 1.0s / 18s
+
       double dot = 0;
       for (int i = 0; i < dim; i++) 
         dot += mean_z[i] * x_v[ik][i];
-
-      //delta_z = mean_z - z[ik] - alpha * grad_f[ik] 
+     
+      //delta_z = mean_z - z[ik] - alpha * grad_f[ik], 12s / 18s
+      
       for (int c =  0; c < dim; c++) 
         delta_z[c] = mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * mean_z[c]);
+
       // Now delta_z is delta_z_i
 
 
       // update z_v[ik]
-      // z[ik] += delta[z]
+      // z[ik] += delta[z], 0.8s / 18s
+
       block_mutex[ik].lock();
       for (int c = 0; c < dim; c++)
         z_v[ik][c] += delta_z[c];
       block_mutex[ik].unlock();
-      // auto start = chrono::high_resolution_clock::now();
       
-      // increment mean_z
+
+      // increment mean_z, 3.1 - 4.0 s
       // mean_z += delta_z / n
       for (int c = 0; c < dim; c++)
         atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
 
-      // update iteration counter
-// auto end = chrono::high_resolution_clock::now();
-      itr_ctr--;
 
-      // elapsed += end - start;
+      // update iteration counter
+      
+      itr_ctr--;
+      auto end = chrono::high_resolution_clock::now();
+      elapsed += end - start;
 
     }
     
 
-    // print_mutex.lock();
-    // std::cout << "elapsed time: " << elapsed.count() << " s\n";
-    // print_mutex.unlock();
+    print_mutex.lock();
+    std::cout << "elapsed time: " << elapsed.count() << " s\n";
+    print_mutex.unlock();
     
     delete[] delta_z;
   };
