@@ -12,12 +12,15 @@ using std::cout;
 using std::endl;
 __global__ void zUpdate(const float* __restrict__ A, const float* __restrict__ b, const float* __restrict__ x_half, const float* __restrict__ inv_a_norm2, float* z);
 __global__ void parallel_sum(const float* __restrict__ z, float *x_half);
+
 void err_chk(cudaError err) {
   if (err != cudaSuccess) {
     cout << cudaGetErrorString(err) << endl;
     assert(false);
   }
 }
+
+
 int main() {
   MATFile *pmat;
   pmat = matOpen("svm_data.mat", "r");
@@ -55,9 +58,10 @@ int main() {
     printf("Error closing file %s\n",file);
     return(EXIT_FAILURE);
   }
+  
   float* x_half = new float[d];
-  float* z = new float[d*n];
-  memset(z,0,d*n*sizeof(float));
+  float* z = new float[d*n]();
+
   float* inv_a_norm2 = new float[n];
   for (int i=0; i<n; i++) {
     inv_a_norm2[i] = 0.0;

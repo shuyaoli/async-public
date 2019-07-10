@@ -1,7 +1,8 @@
 addpath('../routine_work/');
 
 Initialize;
-
+rng('shuffle','twister');
+phi = zeros(n,dim);
 
 p = zeros(n, dim); 
 

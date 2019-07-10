@@ -1,10 +1,13 @@
 addpath('../routine_work/');
 
 Initialize;
+rng('shuffle','twister');
+phi = zeros(n,dim);
+
 
 tic
 
-db_trained = Finito_single_threaded_direct(x, y, phi,alpha, s, epoch)
+db_trained = Finito_single_threaded_direct(x, y, phi,alpha, s, epoch);
 
 toc
 
