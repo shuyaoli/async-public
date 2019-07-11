@@ -39,16 +39,7 @@ void read_var(double* var, string var_name, int len)
   var_file.close();
 }
 
-void mean_rowvectors(double result[], double x[], int num_row, int num_col)
-{
-  for (int c = 0; c < num_col; c++) {
-    double total = 0;
-    for (int r = 0; r < num_row; r++) {
-      total += x[r * num_col + c];
-    }
-    result[c] = total / num_row;
-  }
-}
+
   
 int main()
 {
@@ -57,6 +48,7 @@ int main()
 
   read_var(x_a, "x_a", n * dim);
   read_var(y, "y", dim);
+
   
   double* z_a =  new double[n * dim]();
 
@@ -85,32 +77,30 @@ int main()
     //calculate gradient
     //zi = zmean - alpha * gradient
     // update zmean using cuda
-
     for (int ik = 0; ik < n; ik++) {
-      
       double dot = 0;
       for (int i = 0; i < dim; i++) 
         dot += mean_z[i] * x_a[dim * ik + i];
-
+      
       for (int c =  0; c < dim; c++) {
-        if (k ==1 && ik == 5 &&c==2)
-          cout << mean_z[c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
         z_a[ik*dim+c] = mean_z[c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
       }
     }
 
-    if (k == 0)
-      for (int i = 0; i < n * dim; i++)
-        cout << z_a[i] << ' ';
-    
-    mean_rowvectors(mean_z, z_a, n, dim);
+    for (int c = 0; c < dim; c++){
+      double sum = 0;
+      for (int i = 0; i < n; i++)
+        sum += z_a[i * dim + c];
+      mean_z[c] = sum / n ;
+    }
 
+    cout << mean_z[0];
   }
 
 
   
-  // for (int i = 0; i < dim; i++)
-  //   printf("%.15f\n", mean_z[i]);
+  for (int i = 0; i < dim; i++)
+    printf("%.15f\n", mean_z[i]);
   
   return 0;
 }

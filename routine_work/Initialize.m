@@ -1,5 +1,5 @@
 clear;
-SAVE_GD_CUDA=1;
+SAVE_GD_CUDA=0;
 
 seed = 1;
 err = 0.01; 
