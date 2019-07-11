@@ -111,7 +111,8 @@ int main() {
   parallel_sum <<<n/1024,1024>>> (d_z, d_x_half);
 
   err_chk(cudaMemcpy(x_half, d_x_half, sizeof(num_T)*d, cudaMemcpyDeviceToHost));
-
+  cudaFree(d_z);
+  cudaFree(d_x_half);
   for (int i = 0; i < 10; i++)
     printf("%f\n", x_half[i]);
   return 0;

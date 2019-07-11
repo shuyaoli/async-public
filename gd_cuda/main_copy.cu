@@ -98,20 +98,7 @@ __global__ void parallel_mean(const double* __restrict__ z, double *sum_z) {
   }
 }
 
-__global__ void zUpdate(const double* __restrict__ x_a, const double* __restrict__ y, double* z_a, const double* __restrict__ mean_z)
-{
-  const int ik = blockDim.x*blockIdx.x + threadIdx.x;
-  
-      
-  double dot = 0;
-  for (int i = 0; i < dim; i++) 
-    dot += mean_z[i] * x_a[dim * ik + i];
-
-  for (int c =  0; c < dim; c++) {        
-    z_a[ik+c*n] = mean_z[c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
-  }
-  
-}
+// __global__ void zUpdate(const double* __restrict__ x_a, const double* __restrict__ y, const double* __restrict__ z_a, const double* __restrict__ mean_z)
 
 int main()
 {
@@ -125,34 +112,51 @@ int main()
 
   double* mean_z = new double [dim] ();
 
-  double *d_x_a, *d_y;
+  // double *d_x_a, *d_y;
   double *d_z_a, *d_mean_z;
 
-  err_chk(cudaMalloc((void**)&d_x_a, sizeof(double) * n * dim));
-  err_chk(cudaMalloc((void**)&d_y, sizeof(double) * n ));
+  // // err_chk(cudaMalloc((void**)&d_x_a, sizeof(double) * n * dim));
+  // // err_chk(cudaMalloc((void**)&d_y, sizeof(double) * n ));
   err_chk(cudaMalloc((void**)&d_z_a, sizeof(double) * n * dim));
   err_chk(cudaMalloc((void**)&d_mean_z, sizeof(double) * dim));
   cout << "CUDA Malloc done\n";
   
-  err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
 
-  cout << "CUDA Memcpy Host to Device Done\n";
+  // // err_chk(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  // // err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
+
+  // cout << "CUDA Memcpy Host to Device Done\n";
 
   
   for (int k = 0; k < epoch; k++) {
     
-    zUpdate <<< n / 512, 512 >>> (d_x_a, d_y, d_z_a, d_mean_z);
+    for (int ik = 0; ik < n; ik++) {
+      
+      double dot = 0;
+      for (int i = 0; i < dim; i++) 
+        dot += mean_z[i] * x_a[dim * ik + i];
+
+      for (int c =  0; c < dim; c++) {        
+        z_a[ik+c*n] = mean_z[c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
+      }
     
+    }
+    err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
     err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
     parallel_mean <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
 
     err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
-    for (int c = 0; c < dim; c++)
-      mean_z[c] /= n;
-    err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    
+    // mean_rowvectors(mean_z, z_a, n, dim)
+    // for (int c = 0; c < dim; c++) {
+    //   double total = 0;
+    //   for (int r = 0; r < n; r++) {
+    //     total += z_a[r + c * n];
+    //   }
+    //   mean_z[c] = total / n;
+    // }
+    for (int c = 0; c < dim; c++) mean_z[c] /= n;
   }
 
   cudaFree(d_z_a);
