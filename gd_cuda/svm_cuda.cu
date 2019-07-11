@@ -10,6 +10,7 @@
 #define lambda 0.1f
 using std::cout;
 using std::endl;
+
 __global__ void zUpdate(const float* __restrict__ A, const float* __restrict__ b, const float* __restrict__ x_half, const float* __restrict__ inv_a_norm2, float* z);
 __global__ void parallel_sum(const float* __restrict__ z, float *x_half);
 
