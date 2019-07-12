@@ -82,7 +82,7 @@ __global__ void parallel_sum(const double* __restrict__ z,
 
     // Write all 32 of these partial sums to shared memory
     if(lane == 0)
-      buffer[threadIdx.x / WARP_SIZE] = temp;
+      buffer[threadIdx.x / WARP_SIZE] = temp / n;
     
     __syncthreads();
 
@@ -131,44 +131,45 @@ int main()
 
   double* mean_z = new double [dim];
 
-  // double *d_x_a, *d_y;
+  double *d_x_a, *d_y;
   double *d_z_a, *d_mean_z;
 
-  // err_chk(cudaMalloc((void**)&d_x_a, sizeof(double) * n * dim));
-  // err_chk(cudaMalloc((void**)&d_y, sizeof(double) * n ));
+  err_chk(cudaMalloc((void**)&d_x_a, sizeof(double) * n * dim));
+  err_chk(cudaMalloc((void**)&d_y, sizeof(double) * n ));
   err_chk(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
   err_chk(cudaMalloc(&d_mean_z, sizeof(double) * dim));
 
-  // err_chk(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  // err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
+  err_chk(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
+  err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
 
-  // cout << "CUDA Memcpy Host to Device Done\n";
   
   for (int k = 0; k < epoch; k++) {
     
-    // zUpdate <<< n / 512, 512 >>> (d_x_a, d_y, d_z_a, d_mean_z);
-    for (int ik = 0; ik < n; ik++) {
-        double dot = 0;
-        for (int i = 0; i < dim; i++) 
-          dot += mean_z[i] * x_a[dim * ik + i];
+    zUpdate <<< n / 1024, 1024 >>> (d_x_a, d_y, d_z_a, d_mean_z);
+    // for (int ik = 0; ik < n; ik++) {
+    //     double dot = 0;
+    //     for (int i = 0; i < dim; i++) 
+    //       dot += mean_z[i] * x_a[dim * ik + i];
         
-        for (int c =  0; c < dim; c++) {        
-          z_a[ik+c*n] = mean_z[c] - alpha *
-            (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
-        }
-    }
+    //     for (int c =  0; c < dim; c++) {        
+    //       z_a[ik+c*n] = mean_z[c] - alpha *
+    //         (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
+    //     }
+    // }
 
-    err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-    memset(mean_z, 0, sizeof(float) * dim);
+    
+    memset(mean_z, 0, sizeof(double) * dim);
     err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
     parallel_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
 
-    err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+    // err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
     
-    for (int c = 0; c < dim; c++)
-      mean_z[c] /= n;
+    // for (int c = 0; c < dim; c++)
+    //   mean_z[c] /= n;
 
+    // err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
     // for (int c = 0; c < dim; c++) {
     //   double total = 0;
@@ -180,10 +181,11 @@ int main()
 
   }
 
+  err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+  for (int i = 0; i < dim; i++) printf("%.15f\n", mean_z[i]);
   cudaFree(d_z_a);
   cudaFree(d_mean_z);
-  
-  for (int i = 0; i < dim; i++) printf("%.15f\n", mean_z[i]);
-
+  cudaFree(d_x_a);
+  cudaFree(d_y);
   return 0;
 }
