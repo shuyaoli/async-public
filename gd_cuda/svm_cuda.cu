@@ -34,13 +34,13 @@ int main() {
   if (p_A == NULL) {
     printf("Error reading A\n");
     assert(false)
-  }
+      }
   mxArray* p_y;
   p_y = matGetVariable(pmat, "y");
   if (p_y == NULL) {
     printf("Error reading y\n");
     assert(false)
-  }
+      }
   const int max_iter = 1000;
   
   float* A = new float[n*d];
@@ -89,11 +89,11 @@ int main() {
   err_chk(cudaMemcpy(d_z, z, sizeof(float)*n*d, cudaMemcpyHostToDevice));
   err_chk(cudaMemcpy(d_inv_a_norm2, inv_a_norm2, sizeof(float)*n, cudaMemcpyHostToDevice));
   
-cout << "starting iteration" << endl;
-clock_t begin = clock();
-for (int ii=0; ii<max_iter; ii++) {
+  cout << "starting iteration" << endl;
+  clock_t begin = clock();
+  for (int ii=0; ii<max_iter; ii++) {
     if (ii%100==0)
-        cout << "At iteration count: " << ii << endl;
+      cout << "At iteration count: " << ii << endl;
         
     memset(x_half,0,d*sizeof(float));
     err_chk(cudaMemcpy(d_x_half, x_half, sizeof(float)*d, cudaMemcpyHostToDevice));
@@ -109,34 +109,34 @@ for (int ii=0; ii<max_iter; ii++) {
     //x = (z_half+A'*diag(beta.*y));
     zUpdate <<< n/512, 512>>> (d_A, d_y, d_x_half, d_inv_a_norm2, d_z);
         
-}
- cudaDeviceSynchronize();
-   float runtime = float(clock() - begin) / CLOCKS_PER_SEC;
+  }
+  cudaDeviceSynchronize();
+  float runtime = float(clock() - begin) / CLOCKS_PER_SEC;
   cout << "Total runtime is " << runtime << "s." << endl;
-    cout << "This is " << runtime / float(max_iter) * 1000 << "ms per iteration" << endl;
-err_chk(cudaMemcpy(x_half, d_x_half, sizeof(float)*d, cudaMemcpyDeviceToHost));
-MATFile *w_mat;
-w_mat = matOpen(file, "w");
-if (pmat == NULL) {
-  printf("Error creating file %s\n", file);
-  printf("(Do you have write permission in this directory?)\n");
-  assert(false);
-}
-mxArray* w_x mxCreateDoubleMatrix(d,1,mxREAL);
-double* double_w_x = mxGetPr(w_x);
-for (int j=0; j<d; j++) {
-  double_w_x[j] = double(x_half[j]);
-}
-status = matPutVariable(w_mat, "x_half", w_x);
-if (status != 0) {
-cout << "write fail" << endl;
-  assert(false);
-}
-mxDestroyArray(w_x);
-if (matClose(w_mat) != 0) {
-printf("Error closing file\n");
-return(EXIT_FAILURE);
-}
+  cout << "This is " << runtime / float(max_iter) * 1000 << "ms per iteration" << endl;
+  err_chk(cudaMemcpy(x_half, d_x_half, sizeof(float)*d, cudaMemcpyDeviceToHost));
+  MATFile *w_mat;
+  w_mat = matOpen(file, "w");
+  if (pmat == NULL) {
+    printf("Error creating file %s\n", file);
+    printf("(Do you have write permission in this directory?)\n");
+    assert(false);
+  }
+  mxArray* w_x mxCreateDoubleMatrix(d,1,mxREAL);
+  double* double_w_x = mxGetPr(w_x);
+  for (int j=0; j<d; j++) {
+    double_w_x[j] = double(x_half[j]);
+  }
+  status = matPutVariable(w_mat, "x_half", w_x);
+  if (status != 0) {
+    cout << "write fail" << endl;
+    assert(false);
+  }
+  mxDestroyArray(w_x);
+  if (matClose(w_mat) != 0) {
+    printf("Error closing file\n");
+    return(EXIT_FAILURE);
+  }
   cudaFree(d_A);
   cudaFree(d_y);
   cudaFree(d_x_half);

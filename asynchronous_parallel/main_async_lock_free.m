@@ -1,4 +1,4 @@
-mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_async_lock_free.cpp
+% mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_async_lock_free.cpp
 
 addpath('../routine_work/');
 
