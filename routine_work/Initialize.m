@@ -22,5 +22,5 @@ if SAVE_GD_CUDA
         writematrix(x_a, '../gd_cuda/SMALL/x_a');
         writematrix(y, '../gd_cuda/SMALL/y')
     end
-
+    if n
 end
