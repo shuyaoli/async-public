@@ -3,3 +3,6 @@
 *.mexa64
 *~
 \#*#
+*SMALL*
+*LARGE*
+*.o
