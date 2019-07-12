@@ -139,7 +139,6 @@ int main()
   err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
 
   cout << "CUDA Memcpy Host to Device Done\n";
-
   
   for (int k = 0; k < epoch; k++) {
     
@@ -152,6 +151,8 @@ int main()
     err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
     for (int c = 0; c < dim; c++)
       mean_z[c] /= n;
+    if (k==0)
+      cout << "meow" << z_a[0]<<endl;
     err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
   }
 
@@ -160,6 +161,6 @@ int main()
   
   for (int i = 0; i < dim; i++)
     printf("%.15f\n", mean_z[i]);
-  
+
   return 0;
 }
