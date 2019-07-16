@@ -25,7 +25,7 @@ __device__ double atomic_add(double* address, double val)
 #define n 4096
 #define dim 32
 #define s 1
-#define epoch 30
+#define epoch 20
 #define alpha 0.5
 #define SIZE "SMALL"
 #define WARP_SIZE 32
@@ -129,13 +129,13 @@ int main()
   
   double* z_a =  new double[n * dim]();
 
-  double* mean_z = new double [dim];
+  double* mean_z = new double [dim]();
 
   double *d_x_a, *d_y;
   double *d_z_a, *d_mean_z;
 
-  err_chk(cudaMalloc((void**)&d_x_a, sizeof(double) * n * dim));
-  err_chk(cudaMalloc((void**)&d_y, sizeof(double) * n ));
+  err_chk(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
+  err_chk(cudaMalloc(&d_y, sizeof(double) * n ));
   err_chk(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
   err_chk(cudaMalloc(&d_mean_z, sizeof(double) * dim));
 
@@ -146,7 +146,7 @@ int main()
   
   for (int k = 0; k < epoch; k++) {
     
-    zUpdate <<< n / 1024, 1024 >>> (d_x_a, d_y, d_z_a, d_mean_z);
+    zUpdate <<< n / 512, 512 >>> (d_x_a, d_y, d_z_a, d_mean_z);
     // for (int ik = 0; ik < n; ik++) {
     //     double dot = 0;
     //     for (int i = 0; i < dim; i++) 
