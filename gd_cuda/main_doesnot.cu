@@ -129,20 +129,20 @@ int main()
   
   double* z_a =  new double[n * dim]();
 
-  double* mean_z = new double [dim]();
+  double* mean_z = new double [dim];
 
   double *d_x_a, *d_y;
   double *d_z_a, *d_mean_z;
 
-  err_chk(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
-  err_chk(cudaMalloc(&d_y, sizeof(double) * n ));
+  err_chk(cudaMalloc((void**)&d_x_a, sizeof(double) * n * dim));
+  err_chk(cudaMalloc((void**)&d_y, sizeof(double) * n ));
   err_chk(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
   err_chk(cudaMalloc(&d_mean_z, sizeof(double) * dim));
 
   err_chk(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
   err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
   err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+
   
   for (int k = 0; k < epoch; k++) {
     
@@ -161,12 +161,13 @@ int main()
     
     memset(mean_z, 0, sizeof(double) * dim);
     err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
-    // err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+
     parallel_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
 
     // err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
     
-    // for (int c = 0; c < dim; c++) mean_z[c] /= n;
+    // for (int c = 0; c < dim; c++)
+    //   mean_z[c] /= n;
 
     // err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 

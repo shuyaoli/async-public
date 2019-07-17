@@ -7,7 +7,7 @@ n = 4096;
 dim = 32; 
 
 alpha = 0.5;
-epoch = 30;
+epoch = 20;
 
 s = 1; % regularizer
 
