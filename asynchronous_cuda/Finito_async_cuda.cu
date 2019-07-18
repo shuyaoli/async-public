@@ -4,32 +4,40 @@
 #include <cmath>
 #include <cassert>
 #include <cuda.h>
+#include <curand.h> // CURAND_RNG_PSEUDO_MTGP32
+#include <curand_kernel.h>
 __device__ double atomic_add(double* address, double val)
 {
-    unsigned long long int* address_as_ull =
-                              (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
+  unsigned long long int* address_as_ull =
+    (unsigned long long int*)address;
+  unsigned long long int old = *address_as_ull, assumed;
 
-    do {
-        assumed = old;
-        old = atomicCAS(address_as_ull, assumed,
-                        __double_as_longlong(val +
-                               __longlong_as_double(assumed)));
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val +
+                                         __longlong_as_double(assumed)));
 
     // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-    } while (assumed != old);
+  } while (assumed != old);
 
-    return __longlong_as_double(old);
+  return __longlong_as_double(old);
 }
 
 #define n 4096
 #define dim 32
 #define s 1
-#define epoch 40
+#define epoch 200
 #define alpha 0.5
 #define SIZE "SMALL"
 #define WARP_SIZE 32
 #define NUM_THREAD 8
+
+#define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
+    printf("Error at %s:%d\n",__FILE__,__LINE__); \
+    printf("Message: %s\n", cudaGetErrorString(x));\
+    return EXIT_FAILURE;}} while(0)
+
 using namespace std;
 
 void err_chk(cudaError err) {
@@ -58,6 +66,14 @@ void read_var(double* var, string var_name, int len)
     }
   }
   var_file.close();
+}
+// randomness design choice:
+// different threads have different seeds; the same thread across different kernel lauches have the same seed but different sequence number
+// 
+
+__global__ void initCurand (curandState *states, unsigned long seed) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x; // possibly adding time to seq number 
+  curand_init(seed, i, 0, &states[i]);
 }
 
 __global__ void parallel_sum(const double* __restrict__ z,
@@ -95,26 +111,34 @@ __global__ void parallel_sum(const double* __restrict__ z,
 
     // Add this block's sum to the total sum
     if(threadIdx.x == 0)
-        atomic_add(sum_z+j, temp);
-      // sum_z[j] += temp;
+      atomic_add(sum_z+j, temp);
+    // sum_z[j] += temp;
   }
 }
 
 __global__ void zUpdate(const double* __restrict__ x_a,
                         const double* __restrict__ y,
                         double* z_a,
-                        const double* __restrict__ mean_z)
+                        const double* __restrict__ mean_z,
+                        double*  delta_z,
+                        curandState_t *states)
 {
-  const int ik = blockDim.x*blockIdx.x + threadIdx.x;
-  
-      
+  // const int ik = blockDim.x*blockIdx.x + threadIdx.x;
+  const int idx = blockDim.x*blockIdx.x + threadIdx.x;
+  const int ik =  curand (&states[idx]) % n;
+
   double dot = 0;
   for (int i = 0; i < dim; i++) 
     dot += mean_z[i] * x_a[dim * ik + i];
 
   for (int c =  0; c < dim; c++) {        
-    z_a[ik+c*n] = mean_z[c] -
+    delta_z[idx+c*NUM_THREAD] = mean_z[c] - z[ik + c * n] - 
       alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
+  }
+
+  // TODO: lock it!
+  for (int c = 0; c < dim; c++) {
+    z[ik + c * n] += delta_z[idx + c * NUM_THREAD];
   }
   
 }
@@ -127,32 +151,43 @@ int main()
   read_var(x_a, "x_a", n * dim);
   read_var(y, "y", n);
   
-  double* z_a =  new double[n * dim]();
-
-  double* mean_z = new double [dim]();
-  double* delta_z = new double [dim * NUM_THREAD] ();
-  
   double *d_x_a, *d_y;
-  double *d_z_a, *d_mean_z;
+  CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
+  CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
+  CUDA_CALL(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
 
-  err_chk(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
-  err_chk(cudaMalloc(&d_y, sizeof(double) * n ));
-  err_chk(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
-  err_chk(cudaMalloc(&d_mean_z, sizeof(double) * dim));
 
-  err_chk(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+  curandState *d_states;
+  CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * n));
+  initCurand <<< n / 1024, 1024 >>> ( d_states, 0);
+
   
+  double* z_a =  new double[n * dim]();
+  double* mean_z = new double [dim]();
+  double *d_z_a, *d_mean_z;
+  CUDA_CALL(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
+  CUDA_CALL(cudaMalloc(&d_mean_z, sizeof(double) * dim));                 
+  CUDA_CALL(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+  
+  double* d_delta_z;
+  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * n));
+  
+
   for (int k = 0; k < epoch; k++) {
-    zUpdate <<< n / 1024, 1024 >>> (d_x_a, d_y, d_z_a, d_mean_z);
+    // initCurand <<< n / 1024, 1024 >>> ( d_states, k);
+    zUpdate <<< n / 1024, 1024 >>> (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);
+
+
     memset(mean_z, 0, sizeof(double) * dim);
-    err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+
+    
     parallel_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
   }
 
-  err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+  CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
   
   for (int i = 0; i < dim; i++) printf("%.15f\n", mean_z[i]);
   
