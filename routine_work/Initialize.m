@@ -1,6 +1,8 @@
 clear;
-SAVE_GD_CUDA=1;
-
+SAVE_CUDA_DATA=1;
+if (SAVE_CUDA_DATA)
+   input("Do you really want to save CUDA DATA? Press Ctrl-C to break. Any input to continue");
+end
 seed = 1;
 err = 0.01; 
 rng(seed);
@@ -15,7 +17,7 @@ s = 1; % regularizer
 
 [x, y, ~] = generate_dataset(n, dim, err, seed); 
 
-if SAVE_GD_CUDA
+if SAVE_CUDA_DATA
     if n == 4096 && dim ==32
         x_a = x';
         x_a = x_a(:);

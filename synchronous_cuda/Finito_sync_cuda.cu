@@ -24,12 +24,12 @@ __device__ double atomic_add(double* address, double val)
   return __longlong_as_double(old);
 }
 
-#define n 4096
-#define dim 32
+#define n 8192
+#define dim 1024
 #define s 1
 #define epoch 60
 #define alpha 0.5
-#define SIZE "SMALL"
+#define SIZE "LARGE"
 #define WARP_SIZE 32
 #define NUM_THREAD 1024 
 
@@ -104,6 +104,17 @@ __global__ void parallel_sum(const double* __restrict__ z,
       atomic_add(sum_z+j, temp);
     // sum_z[j] += temp;
   }
+}
+
+__global__ void parallel_me_rotate(const double* __restrict__ z,
+                                     double* __restrict__ mean_z) {
+  
+  int idx = blockIdx.x * blockDim.x + threadIdx.x; // 1 ~ dim
+  double total = 0;
+  for (int c = 0; c < NUM_THREAD; c++) {
+    total += z[idx * NUM_THREAD + c];
+  }
+  mean_z[idx] = total / n;
 }
 
 __global__ void zUpdate(const double* __restrict__ x_a,
@@ -191,11 +202,15 @@ int main()
     // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     // parallel_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
     //---------------------------------------------------------------
-    
+
+    //------------------------One way to calculate delta_mean-------------------------
     memset(delta_mean, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean, delta_mean, sizeof(double) * dim, cudaMemcpyHostToDevice));
     parallel_sum <<< NUM_THREAD / 1024, 1024>>> (d_delta_z, d_delta_mean);
 
+    //------------------Another way to calculate delta_mean----------------------------
+    // parallel_mean_rotate <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean);
+    //---------------------------------------------------------------------------------
     
     CUDA_CALL(cudaMemcpy(delta_mean, d_delta_mean, sizeof(double) * dim, cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
@@ -203,8 +218,8 @@ int main()
     for (int c = 0; c < dim; c++) {
       mean_z[c] += delta_mean[c];
     }
-    CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     
+    CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     
   }
 
