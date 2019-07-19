@@ -27,11 +27,11 @@ __device__ double atomic_add(double* address, double val)
 #define n 4096
 #define dim 32
 #define s 1
-#define epoch 500
+#define epoch 60
 #define alpha 0.5
 #define SIZE "SMALL"
 #define WARP_SIZE 32
-#define NUM_THREAD 1024
+#define NUM_THREAD 1024 * 1
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
     printf("Error at %s:%d\n",__FILE__,__LINE__); \
@@ -39,13 +39,6 @@ __device__ double atomic_add(double* address, double val)
     return EXIT_FAILURE;}} while(0)
 
 using namespace std;
-
-void err_chk(cudaError err) {
-  if (err != cudaSuccess) {
-    cout << cudaGetErrorString(err) << endl;
-    assert(false);
-  }
-}
 
 void read_var(double* var, string var_name, int len)
 {
@@ -67,9 +60,6 @@ void read_var(double* var, string var_name, int len)
   }
   var_file.close();
 }
-// randomness design choice:
-// different threads have different seeds; the same thread across different kernel lauches have the same seed but different sequence number
-// 
 
 __global__ void initCurand (curandState *states, unsigned long seed) {
   int i = blockIdx.x * blockDim.x + threadIdx.x; // possibly adding time to seq number 
@@ -123,10 +113,11 @@ __global__ void zUpdate(const double* __restrict__ x_a,
                         double*  delta_z,
                         curandState_t *states)
 {
-  // const int ik = blockDim.x*blockIdx.x + threadIdx.x;
+
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int ik =  curand (&states[idx]) % n;
   // const int ik = idx % n;
+
   
   double dot = 0;
   for (int i = 0; i < dim; i++) 
@@ -139,9 +130,9 @@ __global__ void zUpdate(const double* __restrict__ x_a,
 
   // TODO: lock it!
   for (int c = 0; c < dim; c++) {
-    z_a[ik + c * n] += delta_z[idx + c * NUM_THREAD];
-  }
-  
+    // z_a[ik + c * n] += delta_z[idx + c * NUM_THREAD];
+    atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_THREAD]);
+  }  
 }
 
 int main()
@@ -188,7 +179,12 @@ int main()
     // initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, k);
     zUpdate <<< NUM_THREAD / 1024, 1024 >>> (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);
 
-
+    //--------The following code enforce z_mean consistency-----------
+    // memset(mean_z, 0, sizeof(double) * dim);
+    // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    // parallel_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
+    //---------------------------------------------------------------
+    
     memset(delta_mean, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean, delta_mean, sizeof(double) * dim, cudaMemcpyHostToDevice));
     parallel_sum <<< NUM_THREAD / 1024, 1024>>> (d_delta_z, d_delta_mean);

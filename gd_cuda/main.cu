@@ -25,7 +25,7 @@ __device__ double atomic_add(double* address, double val)
 #define n 4096
 #define dim 32
 #define s 1
-#define epoch 30
+#define epoch 40
 #define alpha 0.5
 #define SIZE "SMALL"
 #define WARP_SIZE 32
