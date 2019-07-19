@@ -41,7 +41,7 @@ void err_chk(cudaError err) {
 
 void read_var(double* var, string var_name, int len)
 {
-  string filename =
+  string filename = string("../data/") + 
     string(SIZE) + string("/") + var_name + string(".txt");
   ifstream var_file(filename);
   string line;

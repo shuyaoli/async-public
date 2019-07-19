@@ -31,7 +31,7 @@ __device__ double atomic_add(double* address, double val)
 #define alpha 0.5
 #define SIZE "SMALL"
 #define WARP_SIZE 32
-#define NUM_THREAD 1024 * 1
+#define NUM_THREAD 1024 
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
     printf("Error at %s:%d\n",__FILE__,__LINE__); \
@@ -42,7 +42,7 @@ using namespace std;
 
 void read_var(double* var, string var_name, int len)
 {
-  string filename =
+  string filename = string("../data/") + 
     string(SIZE) + string("/") + var_name + string(".txt");
   ifstream var_file(filename);
   string line;
@@ -109,7 +109,7 @@ __global__ void parallel_sum(const double* __restrict__ z,
 __global__ void zUpdate(const double* __restrict__ x_a,
                         const double* __restrict__ y,
                         double* z_a,
-                        const double* __restrict__ mean_z,
+                        double* __restrict__ mean_z,
                         double*  delta_z,
                         curandState_t *states)
 {
@@ -128,11 +128,18 @@ __global__ void zUpdate(const double* __restrict__ x_a,
       alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
   }
 
+  __syncthreads();
   // TODO: lock it!
   for (int c = 0; c < dim; c++) {
     // z_a[ik + c * n] += delta_z[idx + c * NUM_THREAD];
     atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_THREAD]);
-  }  
+  }
+
+  // ----UNCOMMENT this loop, then COMMENT OUT everything in the main loop except zUpdate
+  // for (int c = 0; c < dim; c++){
+  //   atomic_add(&mean_z[c], delta_z[idx + c * NUM_THREAD] / n);
+  // }
+  //------------------------------------------------------------------------------------
 }
 
 int main()
