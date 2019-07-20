@@ -60,7 +60,7 @@ void read_var(double* var, string var_name, int len)
   var_file.close();
 }
 
-__global__ void parallel_sum(const double* __restrict__ z,
+__global__ void reduction_sum(const double* __restrict__ z,
                              double *sum_z) {
   //Holds intermediates in shared memory reduction
   __syncthreads();
@@ -162,7 +162,7 @@ int main()
     memset(mean_z, 0, sizeof(double) * dim);
     err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     // err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-    parallel_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
+    reduction_sum <<< n / 1024, 1024>>> (d_z_a, d_mean_z);
 
     // err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
     
