@@ -24,12 +24,12 @@ __device__ double atomic_add(double* address, double val)
   return __longlong_as_double(old);
 }
 
-#define n 4096
-#define dim 32
+#define n 8192
+#define dim 1024
 #define s 1
 #define epoch 60
 #define alpha 0.5
-#define SIZE "SMALL"
+#define SIZE "LARGE"
 #define WARP_SIZE 32
 #define NUM_THREAD 1024 
 
@@ -110,15 +110,16 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
 }
 
 
-__global__ void parallel_mean_rotate(const double* __restrict__ z,
-                                     double* __restrict__ mean_z) {
+__global__ void parallel_sum_divided(const double* __restrict__ z,
+                                     double* __restrict__ sum_z,
+                                     int num_col, double div) {
   // Lauch num_row threads in total
-  int idx = blockIdx.x * blockDim.x + threadIdx.x; // 1 ~ dim
+  int idx = blockIdx.x * blockDim.x + threadIdx.x; // 1 ~ num_row
   double total = 0;
-  for (int c = 0; c < NUM_THREAD; c++) {
-    total += z[idx * NUM_THREAD + c];
+  for (int c = 0; c < num_col; c++) {
+    total += z[idx * num_col + c];
   }
-  mean_z[idx] = total / n;
+  sum_z[idx] = total / div;
 }
 
 __global__ void zUpdate(const double* __restrict__ x_a,
@@ -131,9 +132,7 @@ __global__ void zUpdate(const double* __restrict__ x_a,
 
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int ik =  curand (&states[idx]) % n;
-  // const int ik = idx % n;
 
-  
   double dot = 0;
   for (int i = 0; i < dim; i++) 
     dot += mean_z[i] * x_a[dim * ik + i];
@@ -174,7 +173,7 @@ int main()
 
   curandState *d_states;
   CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_THREAD));
-  initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, 0);
+  initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, 0); //TODO: seed with time
 
   
   double* z_a =  new double[n * dim]();
@@ -188,14 +187,14 @@ int main()
   double* d_delta_z;
   CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_THREAD));
   //----------SHOULD BE UNNECESSARY--------------------
-  double* delta_z = new double[NUM_THREAD * dim]();
-  CUDA_CALL(cudaMemcpy(d_delta_z, delta_z, sizeof(double) * NUM_THREAD * dim, cudaMemcpyHostToDevice));
+  // double* delta_z = new double[NUM_THREAD * dim] ();
+  // CUDA_CALL(cudaMemcpy(d_delta_z, delta_z, sizeof(double) * NUM_THREAD * dim, cudaMemcpyHostToDevice));
   //--------------------------------------------------
 
-  double* delta_mean_z = new double [dim]();
+  double* delta_mean_z = new double [dim];
   double* d_delta_mean_z;
   CUDA_CALL(cudaMalloc(&d_delta_mean_z, sizeof(double) * dim));
-  CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+  // CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
   
   for (int k = 0; k < epoch * n / NUM_THREAD ; k++) { //epoch * n / NUM_THREAD
     // initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, k);
@@ -213,7 +212,7 @@ int main()
     reduction_sum_divided <<< NUM_THREAD / 1024, 1024>>> (d_delta_z, d_delta_mean_z, dim, NUM_THREAD, n);
 
     //------------------Another way to calculate delta_mean_z----------------------------
-    // parallel_mean_rotate <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z);
+    // parallel_sum_divided <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z, NUM_THREAD, n);
     //---------------------------------------------------------------------------------
     
     CUDA_CALL(cudaMemcpy(delta_mean_z, d_delta_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
@@ -229,7 +228,7 @@ int main()
 
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
   
-  for (int i = 0; i < dim; i++) printf("%.15f\n", mean_z[i]);
+  for (int i = 0; i < 5; i++) printf("%.15f\n", mean_z[i]);
   
   cudaFree(d_z_a);
   cudaFree(d_mean_z);
@@ -237,5 +236,6 @@ int main()
   cudaFree(d_y);
   cudaFree(d_delta_mean_z);
   cudaFree(d_delta_z);
+  cudaFree(d_states);
   return 0;
 }
