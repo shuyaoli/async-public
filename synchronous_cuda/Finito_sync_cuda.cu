@@ -210,7 +210,7 @@ int main()
     memset(delta_mean_z, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     reduction_sum_divided <<< NUM_THREAD / 1024, 1024>>> (d_delta_z, d_delta_mean_z, dim, NUM_THREAD, n);
-
+    
     //------------------Another way to calculate delta_mean_z----------------------------
     // parallel_sum_divided <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z, NUM_THREAD, n);
     //---------------------------------------------------------------------------------
