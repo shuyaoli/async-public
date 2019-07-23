@@ -34,8 +34,8 @@ __device__ double atomic_add(double* address, double val)
 
 #define SIZE "LARGE"
 
-#define NUM_PROCESSOR 4096
-#define UPDATE_BLOCKSIZE 128
+#define NUM_PROCESSOR 1024 // > 1024
+#define UPDATE_BLOCKSIZE 128// <=256
 
 // zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
 
@@ -138,7 +138,12 @@ __global__ void zUpdate(const double* __restrict__ x_a,
 
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int ik =  curand (&states[idx]) % n;
-
+  // int ik;
+  // if (idx % 2 == 1)
+  //   ik = idx;
+  // else
+  //   ik = 2 * idx;
+  
   double dot = 0;
   for (int i = 0; i < dim; i++) 
     dot += mean_z[i] * x_a[dim * ik + i];
@@ -201,32 +206,31 @@ int main()
   // CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
   chrono :: duration <double> elapsed (0);
   
-  
+  cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
   for (int k = 0; k < epoch * n / NUM_PROCESSOR ; k++) {
     // initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, k);
-    cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
-    zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);
     
-    cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
-    //--------The following code enforce z_mean consistency-----------
+    zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);      // 2.6s
+    
+    //--------The following code enforce z_mean consistency somehow inefficiently-----------
     // memset(mean_z, 0, sizeof(double) * dim);
-    // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
-    // reduction_sum_divided <<< n / 1024, 1024>>> (d_z_a, d_mean_z, dim, n, n);
+    // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));  // < 0.01s
+    // reduction_sum_divided <<< n / 1024, 1024>>> (d_z_a, d_mean_z, dim, n, n); // 0.35 s 
     //---------------------------------------------------------------
 
     //------------------------One way to calculate delta_mean_z-------------------------
-
-    
     memset(delta_mean_z, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    // < 0.01 s
     reduction_sum_divided <<< NUM_PROCESSOR / 1024, 1024>>>
-      (d_delta_z, d_delta_mean_z, dim, NUM_PROCESSOR, n);
+      (d_delta_z, d_delta_mean_z, dim, NUM_PROCESSOR, n); // 0.35 s
 
-    
     //------------------Another way to calculate delta_mean_z----------------------------
-    // parallel_sum_divided <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z, NUM_THREAD, n);
+    // parallel_sum_divided <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z, NUM_PROCESSOR, n);
     //---------------------------------------------------------------------------------
+
+    //---------------Comment out the following code when enforcing z_mean consistency------------
     
     CUDA_CALL(cudaMemcpy(delta_mean_z, d_delta_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
@@ -236,9 +240,11 @@ int main()
     }
     
     CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    // < 0.01 s, including memory transfer time
     
+    //-------------------------------------------------------------------------------------------
   }
-
+  cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
   cout << "elapsed time: " << elapsed.count() << " s\n";
   
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
