@@ -105,7 +105,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   auto iterate = [&]() {
     // Allocate local memory for each thread
     
-    chrono :: duration <num_T> elapsed;
+    chrono :: duration <double > elapsed (0);
     
     num_T *delta_z = new num_T [dim];
     
@@ -149,13 +149,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
       itr_ctr--;
       auto end = chrono::high_resolution_clock::now();
-      elapsed += end - start;
+      elapsed += (end - start);
 
     }
     
 
     print_mutex.lock();
-    std::cout << "elapsed time: " << elapsed.count() << " s\n";
+    cout << "elapsed time: " << elapsed.count() << " s\n";
     print_mutex.unlock();
     
     delete[] delta_z;

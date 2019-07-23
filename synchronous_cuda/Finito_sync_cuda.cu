@@ -6,6 +6,7 @@
 #include <cuda.h>
 #include <curand.h> // CURAND_RNG_PSEUDO_MTGP32
 #include <curand_kernel.h>
+#include <chrono>
 __device__ double atomic_add(double* address, double val)
 {
   unsigned long long int* address_as_ull =
@@ -24,14 +25,19 @@ __device__ double atomic_add(double* address, double val)
   return __longlong_as_double(old);
 }
 
+#define WARP_SIZE 32
 #define n 8192
 #define dim 1024
 #define s 1
 #define epoch 60
 #define alpha 0.5
+
 #define SIZE "LARGE"
-#define WARP_SIZE 32
-#define NUM_THREAD 1024 
+
+#define NUM_PROCESSOR 4096
+#define UPDATE_BLOCKSIZE 128
+
+// zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
     printf("Error at %s:%d\n",__FILE__,__LINE__); \
@@ -138,15 +144,13 @@ __global__ void zUpdate(const double* __restrict__ x_a,
     dot += mean_z[i] * x_a[dim * ik + i];
 
   for (int c =  0; c < dim; c++) {        
-    delta_z[idx+c*NUM_THREAD] = mean_z[c] - z_a[ik + c * n] - 
+    delta_z[idx+c*NUM_PROCESSOR] = mean_z[c] - z_a[ik + c * n] - 
       alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
   }
 
-  __syncthreads();
-  // TODO: lock it!
   for (int c = 0; c < dim; c++) {
     // z_a[ik + c * n] += delta_z[idx + c * NUM_THREAD];
-    atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_THREAD]);
+    atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_PROCESSOR]);
   }
 
   // ----UNCOMMENT this loop, then COMMENT OUT everything in the main loop except zUpdate
@@ -160,10 +164,10 @@ int main()
 {
   double *x_a = new double [n * dim];
   double *y = new double [n];
-
+  
   read_var(x_a, "x_a", n * dim);
   read_var(y, "y", n);
-  
+
   double *d_x_a, *d_y;
   CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
   CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
@@ -172,8 +176,8 @@ int main()
 
 
   curandState *d_states;
-  CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_THREAD));
-  initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, 0); //TODO: seed with time
+  CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_PROCESSOR));
+  initCurand <<< NUM_PROCESSOR / 1024, 1024 >>> ( d_states, 0); //TODO: seed with time
 
   
   double* z_a =  new double[n * dim]();
@@ -185,7 +189,7 @@ int main()
   CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
   double* d_delta_z;
-  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_THREAD));
+  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_PROCESSOR));
   //----------SHOULD BE UNNECESSARY--------------------
   // double* delta_z = new double[NUM_THREAD * dim] ();
   // CUDA_CALL(cudaMemcpy(d_delta_z, delta_z, sizeof(double) * NUM_THREAD * dim, cudaMemcpyHostToDevice));
@@ -195,11 +199,16 @@ int main()
   double* d_delta_mean_z;
   CUDA_CALL(cudaMalloc(&d_delta_mean_z, sizeof(double) * dim));
   // CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+  chrono :: duration <double> elapsed (0);
   
-  for (int k = 0; k < epoch * n / NUM_THREAD ; k++) { //epoch * n / NUM_THREAD
+  
+  for (int k = 0; k < epoch * n / NUM_PROCESSOR ; k++) {
     // initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, k);
-    zUpdate <<< NUM_THREAD / 1024, 1024 >>> (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);
-
+    cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
+    zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);
+    
+    cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
     //--------The following code enforce z_mean consistency-----------
     // memset(mean_z, 0, sizeof(double) * dim);
     // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
@@ -207,9 +216,13 @@ int main()
     //---------------------------------------------------------------
 
     //------------------------One way to calculate delta_mean_z-------------------------
+
+    
     memset(delta_mean_z, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
-    reduction_sum_divided <<< NUM_THREAD / 1024, 1024>>> (d_delta_z, d_delta_mean_z, dim, NUM_THREAD, n);
+    reduction_sum_divided <<< NUM_PROCESSOR / 1024, 1024>>>
+      (d_delta_z, d_delta_mean_z, dim, NUM_PROCESSOR, n);
+
     
     //------------------Another way to calculate delta_mean_z----------------------------
     // parallel_sum_divided <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z, NUM_THREAD, n);
@@ -226,9 +239,11 @@ int main()
     
   }
 
+  cout << "elapsed time: " << elapsed.count() << " s\n";
+  
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
   
-  for (int i = 0; i < 5; i++) printf("%.15f\n", mean_z[i]);
+  for (int i = 0; i < 4; i++) printf("%.15f\n", mean_z[i]);
   
   cudaFree(d_z_a);
   cudaFree(d_mean_z);
