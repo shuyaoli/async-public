@@ -231,15 +231,17 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
   // Execute threads
   vector <thread> threads;
+  chrono :: duration <double> elapsed (0);
+  auto start = chrono :: high_resolution_clock::now();
   for (int i = 0; i < num_thread; i++)
     threads.push_back(thread(iterate));
   for (auto& t: threads) t.join();
-
+  auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
+  cout << "elapsed time: " << elapsed.count() << " s\n";
   // MATLAB Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
   num_T * ptr = mxGetPr(plhs[0]);
-  
   for (int c = 0; c < dim; c++)
     ptr[c] = mean_z[c].load(); 
 

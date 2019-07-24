@@ -11,7 +11,7 @@ n = 8192;
 dim = 1024; 
 
 alpha = 0.5;
-epoch = 30;
+epoch = 60;
 
 s = 1; % regularizer
 

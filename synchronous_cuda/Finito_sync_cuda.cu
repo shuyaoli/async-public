@@ -34,8 +34,8 @@ __device__ double atomic_add(double* address, double val)
 
 #define SIZE "LARGE"
 
-#define NUM_PROCESSOR 1024 // > 1024
-#define UPDATE_BLOCKSIZE 128// <=256
+#define NUM_PROCESSOR 2048 // > 1024
+#define UPDATE_BLOCKSIZE 256// <=256
 
 // zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
 
@@ -110,7 +110,7 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
 
     // Add this block's sum to the total sum
     if(threadIdx.x == 0)
-      atomic_add(sum_z+j, temp);
+      atomic_add(sum_z+j, temp);  
     // sum_z[j] += temp;
   }
 }
@@ -131,7 +131,7 @@ __global__ void parallel_sum_divided(const double* __restrict__ z,
 __global__ void zUpdate(const double* __restrict__ x_a,
                         const double* __restrict__ y,
                         double* __restrict__ z_a,
-                        const double* __restrict__ mean_z,
+                        double* __restrict__ mean_z,
                         double* __restrict__ delta_z,
                         curandState_t *states)
 {
@@ -154,15 +154,15 @@ __global__ void zUpdate(const double* __restrict__ x_a,
   }
 
   for (int c = 0; c < dim; c++) {
-    // z_a[ik + c * n] += delta_z[idx + c * NUM_THREAD];
-    atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_PROCESSOR]);
+    // z_a[ik + c * n] += delta_z[idx + c * NUM_PROCESSOR];
+    atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_PROCESSOR]); // atomic gives < 0.1s performance loss
   }
 
   // ----UNCOMMENT this loop, then COMMENT OUT everything in the main loop except zUpdate
   // for (int c = 0; c < dim; c++){
-  //   atomic_add(&mean_z[c], delta_z[idx + c * NUM_THREAD] / n);
+  //   atomic_add(&mean_z[c], delta_z[idx + c * NUM_PROCESSOR] / n);
   // }
-  //------------------------------------------------------------------------------------
+  //-----------------------------That's very bad, don't do it--------------------------------
 }
 
 int main()
