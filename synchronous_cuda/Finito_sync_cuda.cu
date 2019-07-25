@@ -35,6 +35,13 @@ using namespace std;
 
 __device__ double atomic_add(double*, double);
 
+//XXX is the __restrict__ keyword legitimate?
+//const __restrict__ is valid for x_a and y since they are problem data so they never change
+//__restrict__ for mean_z is valid since we do not change (write to) mean_z
+//__restrict__ for delta_z is valid since the access is fully separated by indexing for this kernel
+//__restrict__ for z_a is XXX not XX valid since (with the atomic writes) different threads can write
+//to the same location. (Since there is only one read from z_a, I don't think it will make a difference
+//but the __restrict__ seems to be conceptually wrong.)
 __global__ void zUpdate(const double* __restrict__ x_a,
                         const double* __restrict__ y,
                         double* __restrict__ z_a,
@@ -48,17 +55,30 @@ __global__ void zUpdate(const double* __restrict__ x_a,
   const int ik =  curand (&states[idx]) % n;
   // const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
   // const int ik = idx;
+    
+  // Coalesced memory access is one of the code optimization considerations in CUDA that actually matters.
+  // This has the potential to greatly speed up or slow down your code.
+  // Currently, the problem is that adjacent threads access different parts of the dataset with the random number generation.
+  // One remedy is to have a single warp access consecutive datapoints (circularly consecutive, so use mod (%) to wrap around)
+  // by having only the 0th thread in the warp generate a random index and sharing it among the threads.
+  // Another option is to have the 32 threads within a single warp process the same datapoint
   
-  
+  //XXX Non-coalesced memory access XXX
   double dot = 0;
   for (int i = 0; i < dim; i++) 
     dot += mean_z[i] * x_a[dim * ik + i];
 
+  //Coalesced memory access (good) for delta_z
+  //XXX Non-coalesced memory access for z_a
+  //XXX is this for-loop the main bottleneck? XXX
+  //XXXthe read for mean_z could be shared across the block. consider using __shared__ variables
+  //XXX or should could read mean_z[c] and share it across the warps using warp-level primitives
   for (int c =  0; c < dim; c++) {        
     delta_z[idx+c*NUM_PROCESSOR] = mean_z[c] - z_a[ik + c * n] - 
       alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
   }
 
+  //XXX Non-coalesced memory access XXX
   for (int c = 0; c < dim; c++) {
     // z_a[ik + c * n] += delta_z[idx + c * NUM_PROCESSOR];
     atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_PROCESSOR]); // atomic gives < 0.1s performance loss
