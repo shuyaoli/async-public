@@ -1,4 +1,4 @@
-mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_multi_threaded.cpp
+% mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_multi_threaded.cpp
 
 addpath('../routine_work/');
 
