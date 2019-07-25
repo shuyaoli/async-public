@@ -56,12 +56,16 @@ __global__ void zUpdate(const double* __restrict__ x_a,
   // const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
   // const int ik = idx;
     
-  // Coalesced memory access is one of the code optimization considerations in CUDA that actually matters.
-  // This has the potential to greatly speed up or slow down your code.
-  // Currently, the problem is that adjacent threads access different parts of the dataset with the random number generation.
-  // One remedy is to have a single warp access consecutive datapoints (circularly consecutive, so use mod (%) to wrap around)
-  // by having only the 0th thread in the warp generate a random index and sharing it among the threads.
-  // Another option is to have the 32 threads within a single warp process the same datapoint
+  // Coalesced memory access is one of the code optimization
+  // considerations in CUDA that actually matters. This has the
+  // potential to greatly speed up or slow down your code. Currently,
+  // the problem is that adjacent threads access different parts of
+  // the dataset with the random number generation. One remedy is to
+  // have a single warp access consecutive datapoints (circularly
+  // consecutive, so use mod (%) to wrap around) by having only the
+  // 0th thread in the warp generate a random index and sharing it
+  // among the threads. Another option is to have the 32 threads
+  // within a single warp process the same datapoint
   
   //XXX Non-coalesced memory access XXX
   double dot = 0;
