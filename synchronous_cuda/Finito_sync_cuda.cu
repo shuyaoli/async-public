@@ -9,16 +9,16 @@
 #include <chrono>
 
 #define WARP_SIZE 32
-#define n 16384
-#define dim 2048
+#define n 8192
+#define dim 1024
 #define s 1
 #define epoch 64
 #define alpha 0.5
 
-#define SIZE "LARGE"
+#define SIZE "MEDIUM"
 
-#define NUM_PROCESSOR 16384    // > 1024
-#define UPDATE_BLOCKSIZE 512  // <=256
+#define NUM_PROCESSOR 4096    // > 1024
+#define UPDATE_BLOCKSIZE 256  // <=256
 
 // zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
 
@@ -42,20 +42,16 @@ __device__ double atomic_add(double*, double);
 //__restrict__ for z_a is XXX not XX valid since (with the atomic writes) different threads can write
 //to the same location. (Since there is only one read from z_a, I don't think it will make a difference
 //but the __restrict__ seems to be conceptually wrong.)
-__global__ void zUpdate(const double* __restrict__ x_a,
-                        const double* __restrict__ y,
-                        double* __restrict__ z_a,
-                        double* __restrict__ mean_z,
-                        double* __restrict__ delta_z,
-                        curandState_t *states)
-                        // unsigned int * random_index,
-                        // int itr)
+__global__ void zCalculate(const double* __restrict__ x_a,
+                           const double* __restrict__ y,
+                           const double* __restrict__ z_a,
+                           const double* __restrict__ mean_z,
+                           double* __restrict__ delta_z,
+                           const unsigned int* __restrict__ random_index,
+                           int itr)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
-  const int ik =  curand (&states[idx]) % n;
-  // const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
-  // const int ik = idx;
-    
+  const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
   // Coalesced memory access is one of the code optimization
   // considerations in CUDA that actually matters. This has the
   // potential to greatly speed up or slow down your code. Currently,
@@ -81,7 +77,15 @@ __global__ void zUpdate(const double* __restrict__ x_a,
     delta_z[idx+c*NUM_PROCESSOR] = mean_z[c] - z_a[ik + c * n] - 
       alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
   }
+}
 
+__global__ void zUpdate(double* __restrict__ z_a,
+                        double* __restrict__ delta_z,
+                        unsigned int* __restrict__ random_index,
+                        int itr)
+{
+  const int idx = blockDim.x * blockIdx.x + threadIdx.x;
+  const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
   //XXX Non-coalesced memory access XXX
   for (int c = 0; c < dim; c++) {
     // z_a[ik + c * n] += delta_z[idx + c * NUM_PROCESSOR];
@@ -89,12 +93,9 @@ __global__ void zUpdate(const double* __restrict__ x_a,
   }
 }
 
+
 void read_var(double* ,string, int);
 
-__global__ void initCurand (curandState *states, unsigned long seed) {
-  int i = blockIdx.x * blockDim.x + threadIdx.x; // possibly adding time to seq number 
-  curand_init(seed, i, 0, &states[i]);
-}
 
 __global__ void reduction_sum_divided(const double* __restrict__ z,
                                       double* __restrict__ sum_z,
@@ -118,12 +119,6 @@ int main()
   CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
   CUDA_CALL(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
   CUDA_CALL(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
-
-
-  curandState *d_states;
-  CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_PROCESSOR));
-  initCurand <<< NUM_PROCESSOR / 1024, 1024 >>> ( d_states, 0); //TODO: seed with time
-
   
   double* z_a =  new double[n * dim]();
   double* mean_z = new double [dim]();
@@ -142,21 +137,21 @@ int main()
 
   chrono :: duration <double> elapsed (0);
 
-  // unsigned int * d_random_index;
-  // CUDA_CALL(cudaMalloc(&d_random_index, sizeof(unsigned int) * n * epoch));
-  // curandGenerator_t gen;
-  // CURAND_CALL(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
-  // CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, 1234ULL)); // seed
-  // CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
+  unsigned int * d_random_index;
+  CUDA_CALL(cudaMalloc(&d_random_index, sizeof(unsigned int) * n * epoch));
+  curandGenerator_t gen;
+  CURAND_CALL(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
+  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, 1234ULL)); // seed
+  CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
   
   cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
   for (int k = 0; k < epoch * n / NUM_PROCESSOR ; k++) {
-    // initCurand <<< NUM_THREAD / 1024, 1024 >>> ( d_states, k);
-    
+
+    zCalculate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k);   // 2.6s
+
     zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states);      // 2.6s
-    // zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-      // (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k);
+      (d_z_a, d_delta_z, d_random_index, k);
     //--------The following code enforce z_mean consistency somehow inefficiently-----------
     // memset(mean_z, 0, sizeof(double) * dim);
     // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));  // < 0.01s
@@ -202,7 +197,6 @@ int main()
   cudaFree(d_y);
   cudaFree(d_delta_mean_z);
   cudaFree(d_delta_z);
-  cudaFree(d_states);
   return 0;
 }
 
