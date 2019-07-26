@@ -1,4 +1,4 @@
-% mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_multi_threaded.cpp
+mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_multi_threaded.cpp
 
 addpath('../routine_work/');
 
@@ -6,7 +6,7 @@ Initialize;
 
 tic
 
-numthread = 8;
+numthread = 24;
 
 db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, numthread);
 

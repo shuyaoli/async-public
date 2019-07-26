@@ -217,7 +217,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       for (int c = 0; c < dim; c++) {
         atomic_num_T_add(mean_z[c], delta_z[c] / n);
       }
-      
+      print_mutex.lock();
+      std::cout << itr_ctr.load() << "\n";
+      print_mutex.unlock();
       // elapsed += end - start;
     }
     
@@ -237,7 +239,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     threads.push_back(thread(iterate));
   for (auto& t: threads) t.join();
   auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
-  cout << "elapsed time: " << elapsed.count() << " s\n";
+  cout << "high_resolution_clock elapsed time: " << elapsed.count() << " s\n";
   // MATLAB Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);

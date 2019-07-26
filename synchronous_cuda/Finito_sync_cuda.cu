@@ -10,18 +10,26 @@
 
 #define WARP_SIZE 32
 #define n 16384
-#define dim 2048
+#define dim 4096
 #define s 1
 #define epoch 64
 #define alpha 0.5
 
-#define SIZE "LARGE"
+#define SIZE "HUGE"
 
-#define NUM_PROCESSOR 4096    // > 1024
-#define NUM_AGENT 128
-#define UPDATE_BLOCKSIZE 256  // <=256
+#define NUM_PROCESSOR 8192    
+#define NUM_AGENT 256
 
-// zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+#define UPDATE_BLOCKSIZE 256  
+#define SUM_BLOCKSIZE 256
+#define MEAN_BLOCKSIZE 256
+
+// zCalculate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+// zUpdate    <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+
+// parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
+
+// mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE >>> (d_delta_mean_z, d_mean_z);
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
     printf("Error at %s:%d\n",__FILE__,__LINE__); \
@@ -34,7 +42,7 @@
 
 using namespace std;
 
-__device__ double atomic_add(double*, double);
+// __device__ double atomic_add(double*, double);
 
 //XXX is the __restrict__ keyword legitimate?
 //const __restrict__ is valid for x_a and y since they are problem data so they never change
@@ -111,7 +119,7 @@ __global__ void zUpdate(double* __restrict__ z_a,
     // int cc = (c + warpIdx * 32) % dim;
     // TODO: This gives only 5ms performance gain; I am not sure why it's so small
     
-    atomic_add(&z_a[ik * dim + c], delta_z[warpIdx * dim + c]); 
+    atomicAdd(&z_a[ik * dim + c], delta_z[warpIdx * dim + c]); 
   }
 }
 
@@ -196,13 +204,13 @@ int main()
     //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
 
     //------------------Another way to calculate delta_mean_z----------------------------
-    parallel_sum_divided <<< dim / 256, 256>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
+    parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
 
     //---------------------------------------------------------------------------------
 
     //---------------Comment out the following code when enforcing z_mean consistency------------
 
-    mean_zUpdate <<< dim / 256, 256 >>> (d_delta_mean_z, d_mean_z);
+    mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE >>> (d_delta_mean_z, d_mean_z);
     //-------------------------------------------------------------------------------------------
 
     
@@ -283,7 +291,7 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
 
     // Add this block's sum to the total sum
     if(threadIdx.x == 0)
-      atomic_add(sum_z+j, temp);  
+      atomicAdd(sum_z+j, temp);  
     // sum_z[j] += temp;
   }
 }
@@ -300,20 +308,20 @@ __global__ void parallel_sum_divided(const double* __restrict__ z,
   sum_z[idx] = total / div;
 }
 
-__device__ double atomic_add(double* address, double val)
-{
-  unsigned long long int* address_as_ull =
-    (unsigned long long int*)address;
-  unsigned long long int old = *address_as_ull, assumed;
+// __device__ double atomic_add(double* address, double val)
+// {
+//   unsigned long long int* address_as_ull =
+//     (unsigned long long int*)address;
+//   unsigned long long int old = *address_as_ull, assumed;
 
-  do {
-    assumed = old;
-    old = atomicCAS(address_as_ull, assumed,
-                    __double_as_longlong(val +
-                                         __longlong_as_double(assumed)));
+//   do {
+//     assumed = old;
+//     old = atomicCAS(address_as_ull, assumed,
+//                     __double_as_longlong(val +
+//                                          __longlong_as_double(assumed)));
 
-    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-  } while (assumed != old);
+//     // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+//   } while (assumed != old);
 
-  return __longlong_as_double(old);
-}
+//   return __longlong_as_double(old);
+// }
