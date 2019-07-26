@@ -62,11 +62,14 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   // 0th thread in the warp generate a random index and sharing it
   // among the threads. Another option is to have the 32 threads
   // within a single warp process the same datapoint
+  __shared__ double s_mean_z[dim];
+  for (int c = 0; c < dim; c++)
+    s_mean_z[c] = mean_z[c];
   
   //XXX Non-coalesced memory access XXX
   double dot = 0;
   for (int i = 0; i < dim; i++) 
-    dot += mean_z[i] * x_a[dim * ik + i];
+    dot += s_mean_z[i] * x_a[dim * ik + i];
 
   //Coalesced memory access (good) for delta_z
   //XXX Non-coalesced memory access for z_a
@@ -74,8 +77,8 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   //XXXthe read for mean_z could be shared across the block. consider using __shared__ variables
   //XXX or should could read mean_z[c] and share it across the warps using warp-level primitives
   for (int c =  0; c < dim; c++) {        
-    delta_z[idx+c*NUM_PROCESSOR] = mean_z[c] - z_a[ik + c * n] - 
-      alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
+    delta_z[idx+c*NUM_PROCESSOR] = s_mean_z[c] - z_a[ik + c * n] - 
+      alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * s_mean_z[c]);
   }
 }
 
