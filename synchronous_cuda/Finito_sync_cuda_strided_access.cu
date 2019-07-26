@@ -9,16 +9,15 @@
 #include <chrono>
 
 #define WARP_SIZE 32
-#define n 16384
-#define dim 2048
+#define n 8192
+#define dim 1024
 #define s 1
 #define epoch 64
 #define alpha 0.5
 
-#define SIZE "LARGE"
+#define SIZE "MEDIUM"
 
 #define NUM_PROCESSOR 4096    // > 1024
-#define NUM_AGENT 128
 #define UPDATE_BLOCKSIZE 256  // <=256
 
 // zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
@@ -52,9 +51,7 @@ __global__ void zCalculate(const double* __restrict__ x_a,
                            int itr)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
-  const int lane = threadIdx.x % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
-  const int warpIdx = idx / WARP_SIZE;
-  const int ik =  random_index[itr * NUM_AGENT + warpIdx] % n;
+  const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
   // Coalesced memory access is one of the code optimization
   // considerations in CUDA that actually matters. This has the
   // potential to greatly speed up or slow down your code. Currently,
@@ -66,30 +63,21 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   // among the threads. Another option is to have the 32 threads
   // within a single warp process the same datapoint
   __shared__ double s_mean_z[dim];
- 
-  for (int c = lane; c < dim; c+=WARP_SIZE)
+  for (int c = 0; c < dim; c++)
     s_mean_z[c] = mean_z[c];
   
-  __syncwarp();
   //XXX Non-coalesced memory access XXX
-
-
   double dot = 0;
-  for (int c = lane; c < dim; c+=WARP_SIZE) 
-    dot += s_mean_z[c] * x_a[dim * ik + c];
+  for (int i = 0; i < dim; i++) 
+    dot += s_mean_z[i] * x_a[dim * ik + i];
 
-  // Sum up all "dot" in a warp. Store the result in variable "dot" in every thread
-  for (int delta = WARP_SIZE / 2; delta > 0; delta /= 2)
-    dot += __shfl_xor_sync(0xffffffff, dot, delta);
-  
   //Coalesced memory access (good) for delta_z
   //XXX Non-coalesced memory access for z_a
   //XXX is this for-loop the main bottleneck? XXX
-  // Answer: No. It's just one of the bottle neck for now.
-  //XXX the read for mean_z could be shared across the block. consider using __shared__ variables
+  //XXXthe read for mean_z could be shared across the block. consider using __shared__ variables
   //XXX or should could read mean_z[c] and share it across the warps using warp-level primitives
-  for (int c =  lane; c < dim; c+=WARP_SIZE) {        
-    delta_z[warpIdx * dim + c] = s_mean_z[c] - z_a[ik * dim + c] - 
+  for (int c =  0; c < dim; c++) {        
+    delta_z[idx+c*NUM_PROCESSOR] = s_mean_z[c] - z_a[ik + c * n] - 
       alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * s_mean_z[c]);
   }
 }
@@ -100,27 +88,14 @@ __global__ void zUpdate(double* __restrict__ z_a,
                         int itr)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
-  const int lane = idx % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
-  const int warpIdx = idx / WARP_SIZE;
-  const int ik =  random_index[itr * NUM_AGENT + warpIdx] % n;
+  const int ik =  random_index [itr * NUM_PROCESSOR + idx] % n;
   //XXX Non-coalesced memory access XXX
-  for (int c = lane; c < dim; c+=WARP_SIZE) {
-    // z_a[ik * dim + c] +=  delta_z[warpIdx * dim + c];
-    // atomic gives 50ms performance loss in total for a medium dataset
-    
-    // int cc = (c + warpIdx * 32) % dim;
-    // TODO: This gives only 5ms performance gain; I am not sure why it's so small
-    
-    atomic_add(&z_a[ik * dim + c], delta_z[warpIdx * dim + c]); 
+  for (int c = 0; c < dim; c++) {
+    // z_a[ik + c * n] += delta_z[idx + c * NUM_PROCESSOR];
+    atomic_add(&z_a[ik + c * n], delta_z[idx + c * NUM_PROCESSOR]); // atomic gives < 0.1s performance loss
   }
 }
 
-
-__global__ void mean_zUpdate (const double* __restrict__ delta_mean_z,
-                              double* __restrict__ mean_z) {
-  const int idx = blockDim.x * blockIdx.x + threadIdx.x;
-  mean_z[idx] += delta_mean_z[idx];
-}
 
 void read_var(double* ,string, int);
 
@@ -132,7 +107,7 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
 
 __global__ void parallel_sum_divided(const double* __restrict__ z,
                                      double* __restrict__ sum_z,
-                                     int num_row, int num_col, double div);
+                                     int num_col, double div);
 
 int main()
 {
@@ -157,7 +132,7 @@ int main()
   CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
   double* d_delta_z;
-  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_AGENT));
+  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_PROCESSOR));
 
   double* delta_mean_z = new double [dim];
   double* d_delta_mean_z;
@@ -173,12 +148,8 @@ int main()
   CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
   
   cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
+  for (int k = 0; k < epoch * n / NUM_PROCESSOR ; k++) {
 
-  
-  for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
-    memset(delta_mean_z, 0, sizeof(double) * dim);
-    CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
-    
     zCalculate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
       (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k);   // 2.6s
 
@@ -191,20 +162,28 @@ int main()
     //---------------------------------------------------------------
 
     //------------------------One way to calculate delta_mean_z-------------------------
-
-    // reduction_sum_divided <<< NUM_AGENT / 1024, 1024>>>
-    //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
+    memset(delta_mean_z, 0, sizeof(double) * dim);
+    CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    // < 0.01 s
+    reduction_sum_divided <<< NUM_PROCESSOR / 1024, 1024>>>
+      (d_delta_z, d_delta_mean_z, dim, NUM_PROCESSOR, n); // 0.35 s
 
     //------------------Another way to calculate delta_mean_z----------------------------
-    parallel_sum_divided <<< dim / 256, 256>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
-
+    // parallel_sum_divided <<< dim / 1024, 1024 >>> (d_delta_z, d_delta_mean_z, NUM_PROCESSOR, n);
     //---------------------------------------------------------------------------------
 
     //---------------Comment out the following code when enforcing z_mean consistency------------
-
-    mean_zUpdate <<< dim / 256, 256 >>> (d_delta_mean_z, d_mean_z);
+    
+    CUDA_CALL(cudaMemcpy(delta_mean_z, d_delta_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+    
+    for (int c = 0; c < dim; c++) {
+      mean_z[c] += delta_mean_z[c];
+    }
+    
+    CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     //-------------------------------------------------------------------------------------------
-
+    // < 0.01 s, including memory transfer time
     
     
   }
@@ -290,12 +269,12 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
 
 __global__ void parallel_sum_divided(const double* __restrict__ z,
                                      double* __restrict__ sum_z,
-                                     int num_row, int num_col, double div) {
-  // Lauch num_col threads in total
-  int idx = blockIdx.x * blockDim.x + threadIdx.x; // 1 ~ num_col
+                                     int num_col, double div) {
+  // Lauch num_row threads in total
+  int idx = blockIdx.x * blockDim.x + threadIdx.x; // 1 ~ num_row
   double total = 0;
-  for (int c = 0; c < num_row; c++) {
-    total += z[idx + c * num_col];
+  for (int c = 0; c < num_col; c++) {
+    total += z[idx * num_col + c];
   }
   sum_z[idx] = total / div;
 }
@@ -317,3 +296,4 @@ __device__ double atomic_add(double* address, double val)
 
   return __longlong_as_double(old);
 }
+
