@@ -19,7 +19,7 @@
 // Documented time is the averaged time taken by each thread
 using namespace std;
 
-typedef double num_T;
+// typedef double num_T;
 
 class Barrier {
 private:
@@ -81,9 +81,9 @@ inline int intRand(const int & min, const int & max) noexcept{
   return distribution(*generator);
 }
 
-inline void atomic_num_T_add (atomic <num_T> &p, num_T a) noexcept{
-  num_T old = p.load();
-  num_T desired;
+inline void atomic_double_add (atomic <double> &p, double a) noexcept{
+  double old = p.load();
+  double desired;
   do {
     desired = old + a; // Can be inlined into next line without optimization
   } while(!p.compare_exchange_weak(old, desired));
@@ -92,26 +92,26 @@ inline void atomic_num_T_add (atomic <num_T> &p, num_T a) noexcept{
 // A suggested (from Reddit), possibly optimized version of cas;
 // But for now I don't understand memory order
 
-// void atomic_num_T_add (atomic <num_T> &p,
-//                            num_T a) {
-//   num_T old = p.load(std::memory_order_consume);
-//   num_T desired = old + a;
+// void atomic_double_add (atomic <double> &p,
+//                            double a) {
+//   double old = p.load(std::memory_order_consume);
+//   double desired = old + a;
 //   while(!p.compare_exchange_weak(old, desired,
 //         std::memory_order_release, std::memory_order_consume)) {
 //     desired = old + a;
 //   }
 // }
 
-num_T** array2rowvectors (const num_T *array, int num_row, int num_col) {
+double** array2rowvectors (const double *array, int num_row, int num_col) {
   // return a vector of row vectors
   // Test: 
   //     input {1,2,3,4,5,6}, 
   //     output 
   //            1 3 5
   //            2 4 6
-  num_T** matrix = new num_T* [num_row];
+  double** matrix = new double* [num_row];
   for (int r = 0; r < num_row; r++) {
-    matrix[r] = new num_T[num_col];
+    matrix[r] = new double[num_col];
     for (int c = 0; c < num_col; c++) {
       matrix[r][c] = array[c * num_row + r];
     }
@@ -119,7 +119,7 @@ num_T** array2rowvectors (const num_T *array, int num_row, int num_col) {
   return matrix;
 }
 
-void delete_nested_ptr (num_T **x, int M) {
+void delete_nested_ptr (double **x, int M) {
   for (int i = 0; i < M; i++)
     delete [] x[i];
   delete[]x;
@@ -132,21 +132,21 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   const int n = mxGetDimensions(prhs[0])[0];
   const int dim = mxGetDimensions(prhs[0])[1];
     
-  const num_T* x = mxGetPr(prhs[0]);
-  const num_T* y = mxGetPr(prhs[1]);
-  const num_T alpha = *mxGetPr(prhs[2]);
-  const num_T s = *mxGetPr(prhs[3]);
+  const double* x = mxGetPr(prhs[0]);
+  const double* y = mxGetPr(prhs[1]);
+  const double alpha = *mxGetPr(prhs[2]);
+  const double s = *mxGetPr(prhs[3]);
   const int epoch = *mxGetPr(prhs[4]);
   const int num_thread = *mxGetPr(prhs[5]);
     
-  num_T** x_v = array2rowvectors (x, n, dim);  //new
+  double** x_v = array2rowvectors (x, n, dim);  //new
 
-  num_T** z_v = new num_T* [n];
+  double** z_v = new double* [n];
   for (int r = 0; r < n; r++) {
-    z_v[r] = new num_T [dim] ();
+    z_v[r] = new double [dim] ();
   }
 
-  atomic_int itr_ctr(epoch * n); // Tracking iteration
+  atomic_int itr_ctr(epoch * n / num_thread * num_thread); // Tracking iteration
   
   Barrier read_barrier(0), itr_barrier(0);
   mutex* block_mutex = new mutex [n];
@@ -154,16 +154,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   // Allocate shared memory for all threads
   //() at end is to "value-initialize", i.e., initialize all element to 0
-  atomic <num_T> *mean_z = new atomic <num_T> [dim] ();
+  atomic <double> *mean_z = new atomic <double> [dim] ();
 
   // Prepare threads
   // iterate is a lambda expression with by-reference (&) capture mode
   // outside variables referenced in lambda body is accessed by reference
   auto iterate = [&]() {
     // Allocate local memory for each thread
-    num_T *old_mean_z = new num_T [dim];
-    num_T *delta_z = new num_T [dim];
-    // chrono :: duration <num_T> elapsed;
+    double *old_mean_z = new double [dim];
+    double *delta_z = new double [dim];
+    // chrono :: duration <double> elapsed;
     while (itr_ctr.load() > 0) { // This loop takes 23s/25s
       // update iteration counter
       itr_ctr--;
@@ -183,7 +183,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       read_barrier.mod_incr(num_thread); // < 0.01s
    
       //dot = <old_mean_z, x[ik]>, 1.3s / 25s
-      num_T dot = 0;
+      double dot = 0;
       for (int i = 0; i < dim; i++) 
         dot += old_mean_z[i] * x_v[ik][i];
 
@@ -215,11 +215,14 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       // increament mean_z, 5.5s / 25s
       // mean_z += delta_z / n
       for (int c = 0; c < dim; c++) {
-        atomic_num_T_add(mean_z[c], delta_z[c] / n);
+        atomic_double_add(mean_z[c], delta_z[c] / n);
       }
-      print_mutex.lock();
-      std::cout << itr_ctr.load() << "\n";
-      print_mutex.unlock();
+
+      // if (itr_ctr < 10) {
+        print_mutex.lock();
+        std::cout << itr_ctr.load() << "\n";
+        print_mutex.unlock();
+      // }
       // elapsed += end - start;
     }
     
@@ -243,12 +246,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // MATLAB Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
-  num_T * ptr = mxGetPr(plhs[0]);
+  double * ptr = mxGetPr(plhs[0]);
   for (int c = 0; c < dim; c++)
     ptr[c] = mean_z[c].load(); 
 
   // plhs[1] = mxCreateNum_TMatrix(n, dim, mxREAL);
-  // num_T * ptr1 = mxGetPr(plhs[1]);
+  // double * ptr1 = mxGetPr(plhs[1]);
   // for (int r = 0; r < n; r++)
   //   for (int c = 0; c < dim; c++)
   //     ptr1[r+c*n] = z_v[r][c];
