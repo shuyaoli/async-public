@@ -218,11 +218,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         atomic_double_add(mean_z[c], delta_z[c] / n);
       }
 
-      // if (itr_ctr < 10) {
-        print_mutex.lock();
-        std::cout << itr_ctr.load() << "\n";
-        print_mutex.unlock();
-      // }
       // elapsed += end - start;
     }
     

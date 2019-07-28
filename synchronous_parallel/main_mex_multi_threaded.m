@@ -6,7 +6,7 @@ Initialize;
 
 tic
 
-numthread = 24;
+numthread = 16;
 
 db_trained = Finito_multi_threaded(x, y, alpha, s, epoch, numthread);
 
