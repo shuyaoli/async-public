@@ -182,7 +182,7 @@ int main()
   
   cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
 
-  
+  cudaStream_t stream1, stream2;
   for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
     memset(delta_mean_z, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
@@ -190,7 +190,11 @@ int main()
     zCalculate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
       (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k);   // 2.6s
 
-    zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+    
+    zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE, 0, stream1>>>
       (d_z_a, d_delta_z, d_random_index, k);
     //--------The following code enforce z_mean consistency somehow inefficiently-----------
     // memset(mean_z, 0, sizeof(double) * dim);
@@ -204,16 +208,17 @@ int main()
     //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
 
     //------------------Another way to calculate delta_mean_z----------------------------
-    parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
+    parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE,0, stream2>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
 
     //---------------------------------------------------------------------------------
 
     //---------------Comment out the following code when enforcing z_mean consistency------------
 
-    mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE >>> (d_delta_mean_z, d_mean_z);
+    mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE, 0, stream2 >>> (d_delta_mean_z, d_mean_z);
     //-------------------------------------------------------------------------------------------
 
-    
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
     
   }
   cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
