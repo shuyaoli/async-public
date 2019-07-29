@@ -10,12 +10,12 @@
 
 #define WARP_SIZE 32
 #define n 16384
-#define dim 4096
+#define dim 8192 // TODO: too large to reside in shared memory?
 #define s 1
 #define epoch 64
 #define alpha 0.5
 
-#define SIZE "HUGE"
+#define SIZE "HUGE_SERVER"
 
 #define NUM_PROCESSOR 8192    
 #define NUM_AGENT 256
@@ -73,19 +73,26 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   // 0th thread in the warp generate a random index and sharing it
   // among the threads. Another option is to have the 32 threads
   // within a single warp process the same datapoint
-  __shared__ double s_mean_z[dim];
- 
-  for (int c = lane; c < dim; c+=WARP_SIZE)
-    s_mean_z[c] = mean_z[c];
+
+  // there is no need to use shared memory; compiler does that
+  const double* s_mean_z = mean_z;
   
-  __syncwarp();
-  //XXX Non-coalesced memory access XXX
+  // correct. Do we need syncwarp?
+  // __shared__ double s_mean_z[dim];
+  // for (int c = lane; c < dim; c+=WARP_SIZE)
+    // s_mean_z[c] = mean_z[c];
+  // __syncwarp();
 
-
+  // slower than previous one
+  // __shared__ double s_mean_z[dim];
+  // for (int c = 0; c < dim; c++)
+  //   s_mean_z[c] = mean_z[c];
+  
   double dot = 0;
   for (int c = lane; c < dim; c+=WARP_SIZE) 
     dot += s_mean_z[c] * x_a[dim * ik + c];
-
+  
+  __syncwarp();
   // Sum up all "dot" in a warp. Store the result in variable "dot" in every thread
   for (int delta = WARP_SIZE / 2; delta > 0; delta /= 2)
     dot += __shfl_xor_sync(0xffffffff, dot, delta);

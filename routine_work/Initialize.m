@@ -46,4 +46,10 @@ if SAVE_CUDA_DATA
         writematrix(y, '../data/HUGE/y')
     end
 
+    if n == 16384 && dim == 8192
+        x_a = x';
+        x_a = x_a(:);
+        writematrix(x_a, '../data/HUGE_SERVER/x_a');
+        writematrix(y, '../data/HUGE_SERVER/y')
+    end
 end
