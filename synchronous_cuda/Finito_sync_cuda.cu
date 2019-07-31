@@ -10,22 +10,21 @@
 
 #define WARP_SIZE 32
 #define n 16384
-#define dim 8192 // TODO: too large to reside in shared memory?
+#define dim 8192
 #define s 1
 #define epoch 64
 #define alpha 0.5
 
 #define SIZE "HUGE_SERVER"
 
-#define NUM_PROCESSOR 8192    
-#define NUM_AGENT 256
+#define NUM_AGENT 2048
 
-#define UPDATE_BLOCKSIZE 256  
-#define SUM_BLOCKSIZE 256
-#define MEAN_BLOCKSIZE 256
+#define UPDATE_BLOCKSIZE 128
+#define SUM_BLOCKSIZE 128
+#define MEAN_BLOCKSIZE 128
 
-// zCalculate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-// zUpdate    <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+// zCalculate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+// zUpdate    <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
 
 // parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
 
@@ -189,19 +188,15 @@ int main()
   
   cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
 
-  cudaStream_t stream1, stream2;
+
   for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
     memset(delta_mean_z, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
     
-    zCalculate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
+    zCalculate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
       (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k);   // 2.6s
-
-
-    cudaStreamCreate(&stream1);
-    cudaStreamCreate(&stream2);
     
-    zUpdate <<< NUM_PROCESSOR / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE, 0, stream1>>>
+    zUpdate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
       (d_z_a, d_delta_z, d_random_index, k);
     //--------The following code enforce z_mean consistency somehow inefficiently-----------
     // memset(mean_z, 0, sizeof(double) * dim);
@@ -215,17 +210,14 @@ int main()
     //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
 
     //------------------Another way to calculate delta_mean_z----------------------------
-    parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE,0, stream2>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
+    parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE,0>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
 
     //---------------------------------------------------------------------------------
 
     //---------------Comment out the following code when enforcing z_mean consistency------------
 
-    mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE, 0, stream2 >>> (d_delta_mean_z, d_mean_z);
+    mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE, 0>>> (d_delta_mean_z, d_mean_z);
     //-------------------------------------------------------------------------------------------
-
-    cudaStreamDestroy(stream1);
-    cudaStreamDestroy(stream2);
     
   }
   cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
@@ -265,8 +257,8 @@ void read_var(double* var, string var_name, int len)
   var_file.close();
 }
 
-__global__ void reduction_sum_divided(const double* __restrict__ z,
-                                     double* __restrict__ sum_z,
+__global__ void reduction_sum_divided(const double* __restrict__ v,
+                                     double* __restrict__ sum_v,
                                      int num_row, int num_col, double div) {
   // Lauch num_col threads in total
   
@@ -281,7 +273,7 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
     //j = k;
     double temp;
     // All threads in a block of 1024 take an element
-    temp = z[i + num_col * j];
+    temp = v[i + num_col * j];
     
     // All warps in this block (32) compute the sum of all
     // threads in their warp
@@ -303,21 +295,21 @@ __global__ void reduction_sum_divided(const double* __restrict__ z,
 
     // Add this block's sum to the total sum
     if(threadIdx.x == 0)
-      atomicAdd(sum_z+j, temp);  
-    // sum_z[j] += temp;
+      atomicAdd(sum_v+j, temp);  
+    // sum_v[j] += temp;
   }
 }
 
-__global__ void parallel_sum_divided(const double* __restrict__ z,
-                                     double* __restrict__ sum_z,
+__global__ void parallel_sum_divided(const double* __restrict__ v,
+                                     double* __restrict__ sum_v,
                                      int num_row, int num_col, double div) {
   // Lauch num_col threads in total
   int idx = blockIdx.x * blockDim.x + threadIdx.x; // 1 ~ num_col
   double total = 0;
   for (int c = 0; c < num_row; c++) {
-    total += z[idx + c * num_col];
+    total += v[idx + c * num_col];
   }
-  sum_z[idx] = total / div;
+  sum_v[idx] = total / div;
 }
 
 // __device__ double atomic_add(double* address, double val)
