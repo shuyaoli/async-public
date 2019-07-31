@@ -31,7 +31,7 @@
 
 using namespace std;
 
-__global__ void zCalculate(const double* __restrict__ x_a,
+__global__ void run_async(const double* __restrict__ x_a,
                            const double* __restrict__ y,
                            double*  z_a,
                            double*  mean_z,
@@ -62,7 +62,9 @@ __global__ void zCalculate(const double* __restrict__ x_a,
     for (int delta = WARP_SIZE / 2; delta > 0; delta /= 2)
       dot += __shfl_xor_sync(0xffffffff, dot, delta);
 
-    for (int c =  lane; c < dim; c+=WARP_SIZE) {        
+    for (int c =  lane; c < dim; c+=WARP_SIZE) {
+      // int d = (c + warpIdx * WARP_SIZE) % dim;
+      // TODO: it doesn't work...basically no speed up
       delta_buffer = mean_z[c] - z_a[ik * dim + c] - 
         alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
       atomicAdd(&z_a[ik * dim + c], delta_buffer);
@@ -119,7 +121,7 @@ int main()
   CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_AGENT));
   
   cudaDeviceSynchronize();start=chrono::high_resolution_clock::now();
-  zCalculate <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
+  run_async <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
     (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states, d_itr_ptr);
   cudaDeviceSynchronize();end=chrono::high_resolution_clock::now();elapsed=end-start;
   
