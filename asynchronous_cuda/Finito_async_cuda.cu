@@ -42,6 +42,7 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = threadIdx.x % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
   const int warpIdx = idx / WARP_SIZE;
+  double delta_buffer;
   
   if (lane == 0)
     curand_init(0, warpIdx, 0, &states[warpIdx]);
@@ -62,17 +63,10 @@ __global__ void zCalculate(const double* __restrict__ x_a,
       dot += __shfl_xor_sync(0xffffffff, dot, delta);
 
     for (int c =  lane; c < dim; c+=WARP_SIZE) {        
-      delta_z[warpIdx * dim + c] = mean_z[c] - z_a[ik * dim + c] - 
+      delta_buffer = mean_z[c] - z_a[ik * dim + c] - 
         alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
-    }
-
-    for (int c = lane; c < dim; c+=WARP_SIZE) {
-      atomicAdd(&z_a[ik * dim + c], delta_z[warpIdx * dim + c]); 
-    }
-  
-
-    for (int c = lane; c < dim; c+=WARP_SIZE) {
-      atomicAdd(&mean_z[c], delta_z[warpIdx * dim + c] / n); 
+      atomicAdd(&z_a[ik * dim + c], delta_buffer);
+      atomicAdd(&mean_z[c], delta_buffer / n);
     }
   }
 }
