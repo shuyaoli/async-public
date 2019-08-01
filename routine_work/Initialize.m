@@ -7,8 +7,8 @@ seed = 1;
 err = 0.01; 
 rng(seed);
 
-n = 16384; 
-dim = 8192; 
+n = 4000; 
+dim = 300; 
 
 alpha = 0.5;
 epoch = 64;
@@ -18,12 +18,14 @@ s = 1; % regularizer
 [x, y, ~] = generate_dataset(n, dim, err, seed); 
 
 if SAVE_CUDA_DATA
-    if n == 4096 && dim == 32
+    if n == 4000 && dim == 300
         x_a = x';
         x_a = x_a(:);
         writematrix(x_a, '../data/SMALL/x_a');
         writematrix(y, '../data/SMALL/y')
     end
+    
+    
     
     if n == 8192 && dim == 1024
         x_a = x';

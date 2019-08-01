@@ -73,7 +73,8 @@ inline double** array2rowvectors (const double *array, int num_row, int num_col)
 }
 
 
-void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+void mexFunction(int nlhs, mxArray *plhs[],
+                 int nrhs, const mxArray *prhs[])
 {
   //     Input: x, y, initial random weight phi, alpha, s, epoch
   //     Output: trained decision boundary
@@ -88,7 +89,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   const int epoch = *mxGetPr(prhs[4]);
   const int num_thread = *mxGetPr(prhs[5]);
     
-  double** x_v = array2rowvectors (x, n, dim);  //new
+  double** x_v = array2rowvectors(x, n, dim);  //new
 
   double** z_v = new double* [n];
   for (int r = 0; r < n; r++) {

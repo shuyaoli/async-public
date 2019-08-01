@@ -9,16 +9,16 @@
 #include <chrono>
 
 #define WARP_SIZE 32
-#define n 16384
-#define dim 8192
-#define s 1
-#define epoch 64
-#define alpha 0.5
+#define n 4000
+#define dim 300
+#define s 1 //
+#define epoch 64 //
+#define alpha 0.5 // 
 
-#define NUM_AGENT 2048
+#define NUM_AGENT 1024
 #define BLOCKSIZE 128
 
-#define SIZE "HUGE_SERVER"
+#define SIZE "SMALL"
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) {      \
       printf("Error at %s:%d\n",__FILE__,__LINE__);     \
@@ -32,12 +32,12 @@
 using namespace std;
 
 __global__ void run_async(const double* __restrict__ x_a,
-                           const double* __restrict__ y,
-                           double*  z_a,
-                           double*  mean_z,
-                           double* delta_z,
-                           curandState* states,
-                           int* itr_ptr)
+                          const double* __restrict__ y,
+                          double* z_a,
+                          double* mean_z,
+                          double* delta_z,
+                          curandState* states,
+                          int* itr_ptr)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = threadIdx.x % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
@@ -144,7 +144,10 @@ int main()
   cudaFree(d_mean_z);
   cudaFree(d_x_a);
   cudaFree(d_y);
-  
+  delete []x_a;
+  delete []y;
+  delete []z_a;
+  delete []mean_z;
   return 0;
 }
 
