@@ -109,10 +109,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
     chrono :: duration <double > elapsed (0);
     
     double *delta_z = new double [dim];
-    
+    auto start = chrono::high_resolution_clock::now();
     while (itr_ctr.load() > 0) { // This loop takes 16.8s / 18.1s
-      auto start = chrono::high_resolution_clock::now();
-      
       int ik = intRand(0, n - 1);
 
       // Calculation for delta_z_ik
@@ -149,12 +147,11 @@ void mexFunction(int nlhs, mxArray *plhs[],
       // update iteration counter
       
       itr_ctr--;
-      auto end = chrono::high_resolution_clock::now();
+
       elapsed += (end - start);
 
     }
-    
-
+    auto end = chrono::high_resolution_clock::now();
     print_mutex.lock();
     cout << "elapsed time: " << elapsed.count() << " s\n";
     print_mutex.unlock();

@@ -7,8 +7,8 @@ seed = 1;
 err = 0.01; 
 rng(seed);
 
-n = 4000; 
-dim = 300; 
+n = 16384; 
+dim = 16384; 
 
 alpha = 0.5;
 epoch = 64;

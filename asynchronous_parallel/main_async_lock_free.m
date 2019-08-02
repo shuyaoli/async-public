@@ -1,9 +1,9 @@
-mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_async_lock_free.cpp
+% mex CXXFLAGS="\$CXXFLAGS -std=c++17 -O3 -latomic" Finito_async_lock_free.cpp
 
 addpath('../routine_work/');
 
 Initialize;
-
+disp('Start calculation');
 tic
 
 db_trained = Finito_async_lock_free(x, y, alpha, s, epoch, 8);

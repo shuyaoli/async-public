@@ -8,27 +8,26 @@
 #include <curand_kernel.h>
 #include <chrono>
 #include "mex.h"
-#include "gpu/mxGPUArray.h"
 #include "matrix.h"
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) {      \
       printf("Error at %s:%d\n",__FILE__,__LINE__);     \
       printf("Message: %s\n", cudaGetErrorString(x));   \
-      return EXIT_FAILURE;}} while(0)
+      assert(false);}} while(0)
 
 #define CURAND_CALL(x) do { if((x)!=CURAND_STATUS_SUCCESS) {    \
       printf("CuRand error at %s:%d\n",__FILE__,__LINE__);      \
-      return EXIT_FAILURE;}} while(0)
+      assert(false);}} while(0)
 
 #define WARP_SIZE 32
 
 using namespace std;
-void err_chk(cudaError err) {
-  if (err != cudaSuccess) {
-    cout << cudaGetErrorString(err) << endl;
-    assert(false);
-  }
-}
+// void err_chk(cudaError err) {
+//   if (err != cudaSuccess) {
+//     cout << cudaGetErrorString(err) << endl;
+//     assert(false);
+//   }
+// }
 __global__ void run_async(const double* __restrict__ x_a,
                           const double* __restrict__ y,
                           double* z_a,
@@ -36,15 +35,16 @@ __global__ void run_async(const double* __restrict__ x_a,
                           double* delta_z,
                           curandState* states,
                           int* itr_ptr,
-                          int n, int dim, int alpha, int s, int epoch)
+                          int n, int dim, double alpha, double s, int epoch)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = threadIdx.x % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
   const int warpIdx = idx / WARP_SIZE;
   double delta_buffer;
   
-  if (lane == 0)
+  if (lane == 0) {
     curand_init(0, warpIdx, 0, &states[warpIdx]);
+  }
   while (*itr_ptr < epoch * n) {
     int ik;
     if (lane == 0) {
@@ -75,67 +75,56 @@ __global__ void run_async(const double* __restrict__ x_a,
 void mexFunction(int nlhs, mxArray *plhs[],
                  int nrhs, const mxArray *prhs[])
 {
-  const char * const errId = "Finito_async_cuda_mex:InvalidInput";
-  const char * const errMsg = "Invalid input to MEX file.";
+  // const char * const errId = "Finito_async_cuda_mex:InvalidInput";
+  // const char * const errMsg = "Invalid input to MEX file.";
 
   // prhs[0] and prhs[1] stores x_a and y respectively
+  const int n = mxGetDimensions(prhs[1])[0];
+  const int dim = mxGetDimensions(prhs[0])[0] /  n;
+  
+  const double* x_a = mxGetPr(prhs[0]);
+  const double* y = mxGetPr(prhs[1]);
   const double alpha = *mxGetPr(prhs[2]);
   const double s = *mxGetPr(prhs[3]);
   const int epoch = *mxGetPr(prhs[4]);
   const int NUM_AGENT = *mxGetPr(prhs[5]);
   const int BLOCKSIZE = *mxGetPr(prhs[6]);
   
-  const mxGPUArray *x_a, *y;
-  const double *d_x_a, *d_y;
-
-  mxInitGPU();
-
-  if (!(mxIsGPUArray(prhs[0])) || !(mxIsGPUArray(prhs[1]))) {
-    mexErrMsgIdAndTxt(errId,errMsg);
-  }
-
-  x_a = mxGPUCreateFromMxArray(prhs[0]);
-  y = mxGPUCreateFromMxArray(prhs[1]);
-  
-  if (mxGPUGetClassID(x_a) != mxDOUBLE_CLASS ||
-      mxGPUGetClassID(y) != mxDOUBLE_CLASS) {
-        mexErrMsgIdAndTxt(errId, errMsg);
-  }
-
-  d_x_a = (const double*)(mxGPUGetDataReadOnly(x_a));
-  d_y = (const double*)(mxGPUGetDataReadOnly(y));
-
-  const int n = (int)(mxGPUGetNumberOfElements(y));
-  const int dim = (int)(mxGPUGetNumberOfElements(x_a)) / n;
+  double *d_x_a, *d_y;
+  CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
+  CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
+  CUDA_CALL(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
   
   double* z_a =  new double[n * dim]();
   double* mean_z = new double [dim]();
   double *d_z_a, *d_mean_z;
-  err_chk(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
-  err_chk(cudaMalloc(&d_mean_z, sizeof(double) * dim));                 
-  err_chk(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  err_chk(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
+  CUDA_CALL(cudaMalloc(&d_mean_z, sizeof(double) * dim));                 
+  CUDA_CALL(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
   int zero = 0;
   int* d_itr_ptr;
-  err_chk(cudaMalloc(&d_itr_ptr, sizeof(int)));
-  err_chk(cudaMemcpy(d_itr_ptr, &zero, sizeof(int), cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMalloc(&d_itr_ptr, sizeof(int)));
+  CUDA_CALL(cudaMemcpy(d_itr_ptr, &zero, sizeof(int), cudaMemcpyHostToDevice));
 
   double* d_delta_z;
   curandState *d_states;
   
-  err_chk(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_AGENT));
-  err_chk(cudaMalloc(&d_states, sizeof(curandState) * NUM_AGENT));
+  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_AGENT));
+  CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_AGENT));
   
   chrono :: duration <double> elapsed (0);
   chrono :: high_resolution_clock :: time_point start, end;
+
   cudaDeviceSynchronize();start=chrono::high_resolution_clock::now();
   run_async <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
     (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_states, d_itr_ptr,
-     n, dim, alpha, s,epoch);
+     n, dim, alpha, s, epoch);
   cudaDeviceSynchronize();end=chrono::high_resolution_clock::now();elapsed=end-start;
   
-  err_chk(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+  CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
 
   for (int i = 0; i < 4; i++) printf("%.15f\n", mean_z[i]);
   
@@ -150,10 +139,13 @@ void mexFunction(int nlhs, mxArray *plhs[],
   
   for (int c = 0; c < dim; c++)
     ptr[c] = mean_z[c];
-
+  
+  cudaFree(d_delta_z);
+  cudaFree(d_states);
+  cudaFree(d_z_a);
+  cudaFree(d_mean_z);
+  cudaFree(d_x_a);
+  cudaFree(d_y);
   delete []mean_z;
   delete []z_a;
-
-  mxGPUDestroyGPUArray(x_a);
-  mxGPUDestroyGPUArray(y);
 }

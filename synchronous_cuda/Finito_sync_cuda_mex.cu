@@ -1,59 +1,35 @@
 #include <iostream>
-#include <fstream>
+
 #include <string>
 #include <cmath>
 #include <cassert>
 #include <cuda.h>
-#include <curand.h> 
+#include <curand.h>
 #include <curand_kernel.h>
 #include <chrono>
+#include "mex.h"
+#include "matrix.h"
+
+#define CUDA_CALL(x) do { if((x) != cudaSuccess) {      \
+      printf("Error at %s:%d\n",__FILE__,__LINE__);     \
+      printf("Message: %s\n", cudaGetErrorString(x));   \
+      assert(false);}} while(0)
+
+#define CURAND_CALL(x) do { if((x)!=CURAND_STATUS_SUCCESS) {    \
+      printf("CuRand error at %s:%d\n",__FILE__,__LINE__);      \
+      assert(false);}} while(0)
 
 #define WARP_SIZE 32
-#define n 4000
-#define dim 300
-#define s 1
-#define epoch 64
-#define alpha 0.5
-
-#define SIZE "SMALL"
-
-#define NUM_AGENT 1024
-
-#define UPDATE_BLOCKSIZE 128
-#define SUM_BLOCKSIZE 128
-#define MEAN_BLOCKSIZE 128
-
-// zCalculate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-// zUpdate    <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-
-// parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
-
-// mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE >>> (d_delta_mean_z, d_mean_z);
-
-#define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
-    printf("Error at %s:%d\n",__FILE__,__LINE__); \
-    printf("Message: %s\n", cudaGetErrorString(x));\
-    return EXIT_FAILURE;}} while(0)
-
-#define CURAND_CALL(x) do { if((x)!=CURAND_STATUS_SUCCESS) { \
-    printf("CuRand error at %s:%d\n",__FILE__,__LINE__);\
-    return EXIT_FAILURE;}} while(0)
 
 using namespace std;
-
-// __device__ double atomic_add(double*, double);
-
-// Legitimacy for the __restrict__ keyword
-// const __restrict__ is valid for x_a and y since they are problem data so they never change
-// const __restrict__ for mean_z and z_a is valid since we do not change (write to) mean_z and z_a
-//__restrict__ for delta_z is valid since the access is fully separated by indexing for this kernel
 __global__ void zCalculate(const double* __restrict__ x_a,
                            const double* __restrict__ y,
                            const double* __restrict__ z_a,
                            const double* __restrict__ mean_z,
                            double* __restrict__ delta_z,
                            const unsigned int* __restrict__ random_index,
-                           int itr)
+                           int itr,
+                           int n, int dim, double alpha, double s, int NUM_AGENT)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = threadIdx.x % WARP_SIZE; // TODO: make sure that WARP_SIZE divides blockDim.x 
@@ -99,10 +75,12 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   }
 }
 
+    
 __global__ void zUpdate(double* __restrict__ z_a,
                         double* __restrict__ delta_z,
                         unsigned int* __restrict__ random_index,
-                        int itr)
+                        int itr,
+                        int n, int dim, int NUM_AGENT)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = idx % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
@@ -129,133 +107,6 @@ __global__ void mean_zUpdate (const double* __restrict__ delta_mean_z,
     mean_z[idx] += delta_mean_z[idx];
 }
 
-void read_var(double* ,string, int);
-
-
-__global__ void reduction_sum_divided(const double* __restrict__ z,
-                                      double* __restrict__ sum_z,
-                                      int num_row, int num_col, double div);
-
-
-__global__ void parallel_sum_divided(const double* __restrict__ z,
-                                     double* __restrict__ sum_z,
-                                     int num_row, int num_col, double div);
-
-int main()
-{
-  double *x_a = new double [n * dim];
-  double *y = new double [n];
-  
-  read_var(x_a, "x_a", n * dim);
-  read_var(y, "y", n);
-
-  double *d_x_a, *d_y;
-  CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
-  CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
-  CUDA_CALL(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  CUDA_CALL(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
-  
-  double* z_a =  new double[n * dim]();
-  double* mean_z = new double [dim]();
-  double *d_z_a, *d_mean_z;
-  CUDA_CALL(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
-  CUDA_CALL(cudaMalloc(&d_mean_z, sizeof(double) * dim));                 
-  CUDA_CALL(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
-  CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
-
-  double* d_delta_z;
-  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_AGENT));
-
-  double* delta_mean_z = new double [dim];
-  double* d_delta_mean_z;
-  CUDA_CALL(cudaMalloc(&d_delta_mean_z, sizeof(double) * dim));
-
-  chrono :: duration <double> elapsed (0);
-
-  unsigned int * d_random_index;
-  CUDA_CALL(cudaMalloc(&d_random_index, sizeof(unsigned int) * n * epoch));
-  curandGenerator_t gen;
-  CURAND_CALL(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
-  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, 1234ULL)); // TODO: seed with time
-  CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
-  
-  cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
-
-
-  for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
-    memset(delta_mean_z, 0, sizeof(double) * dim);
-    CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
-    
-    zCalculate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k);
-    
-    zUpdate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-      (d_z_a, d_delta_z, d_random_index, k);
-    //--------The following code enforce z_mean consistency somehow inefficiently-----------
-    // memset(mean_z, 0, sizeof(double) * dim);
-    // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));  // < 0.01s
-    // reduction_sum_divided <<< n / 1024, 1024>>> (d_z_a, d_mean_z, dim, n, n); // 0.35 s 
-    //---------------------------------------------------------------
-
-    //------------------------One way to calculate delta_mean_z-------------------------
-
-    // reduction_sum_divided <<< NUM_AGENT / 1024, 1024>>>
-    //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
-
-    //------------------Another way to calculate delta_mean_z----------------------------
-    parallel_sum_divided <<< 1 + (dim - 1) / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>>
-      (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
-                                  
-    //---------------------------------------------------------------------------------
-
-    //---------------Comment out the following code when enforcing z_mean consistency------------
-
-    mean_zUpdate <<< 1 + (dim - 1) / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE>>>
-      (d_delta_mean_z, d_mean_z, dim);
-    //-------------------------------------------------------------------------------------------
-    
-  }
-  cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
-  cout << "elapsed time: " << elapsed.count() << " s\n";
-  
-  CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
-  
-  for (int i = 0; i < 4; i++) printf("%.15f\n", mean_z[i]);
-  
-  cudaFree(d_z_a);
-  cudaFree(d_mean_z);
-  cudaFree(d_x_a);
-  cudaFree(d_y);
-  cudaFree(d_delta_mean_z);
-  cudaFree(d_delta_z);
-  delete [] x_a;
-  delete [] y;
-  delete [] z_a;
-  delete [] mean_z;
-  delete [] delta_mean_z;
-  return 0;
-}
-
-void read_var(double* var, string var_name, int len)
-{
-  string filename = string("../data/") + 
-    string(SIZE) + string("/") + var_name + string(".txt");
-  ifstream var_file(filename);
-  string line;
-  if (!var_file.is_open()) {
-    cout << "Failed to open " << var_name << endl;
-    exit(EXIT_FAILURE);
-  }
-  for (int i = 0; i < len; i++) {
-    if (getline(var_file, line)) 
-      var[i] = stod(line);
-    else {
-      cout << "Error loading " << var_name << endl;
-      exit(EXIT_FAILURE);
-    }
-  }
-  var_file.close();
-}
 
 __global__ void reduction_sum_divided(const double* __restrict__ v,
                                      double* __restrict__ sum_v,
@@ -300,6 +151,7 @@ __global__ void reduction_sum_divided(const double* __restrict__ v,
   }
 }
 
+
 __global__ void parallel_sum_divided(const double* __restrict__ v,
                                      double* __restrict__ sum_v,
                                      int num_row, int num_col, double div) {
@@ -314,20 +166,111 @@ __global__ void parallel_sum_divided(const double* __restrict__ v,
   }
 }
 
-// __device__ double atomic_add(double* address, double val)
-// {
-//   unsigned long long int* address_as_ull =
-//     (unsigned long long int*)address;
-//   unsigned long long int old = *address_as_ull, assumed;
 
-//   do {
-//     assumed = old;
-//     old = atomicCAS(address_as_ull, assumed,
-//                     __double_as_longlong(val +
-//                                          __longlong_as_double(assumed)));
+void mexFunction(int nlhs, mxArray *plhs[],
+                 int nrhs, const mxArray *prhs[])
+{
+  const int n = mxGetDimensions(prhs[1])[0];
+  const int dim = mxGetDimensions(prhs[0])[0] /  n;
+  
+  const double* x_a = mxGetPr(prhs[0]);
+  const double* y = mxGetPr(prhs[1]);
+  const double alpha = *mxGetPr(prhs[2]);
+  const double s = *mxGetPr(prhs[3]);
+  const int epoch = *mxGetPr(prhs[4]);
+  const int NUM_AGENT = *mxGetPr(prhs[5]);
+  const int BLOCKSIZE = *mxGetPr(prhs[6]);
 
-//     // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-//   } while (assumed != old);
+  double *d_x_a, *d_y;
+  CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
+  CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
+  CUDA_CALL(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
+  
+  double* z_a =  new double[n * dim]();
+  double* mean_z = new double [dim]();
+  double *d_z_a, *d_mean_z;
+  CUDA_CALL(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
+  CUDA_CALL(cudaMalloc(&d_mean_z, sizeof(double) * dim));                 
+  CUDA_CALL(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
+  CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
-//   return __longlong_as_double(old);
-// }
+  double* d_delta_z;
+  CUDA_CALL(cudaMalloc(&d_delta_z, sizeof(double) * dim * NUM_AGENT));
+
+  double* delta_mean_z = new double [dim];
+  double* d_delta_mean_z;
+  CUDA_CALL(cudaMalloc(&d_delta_mean_z, sizeof(double) * dim));
+
+  chrono :: duration <double> elapsed (0);
+
+  unsigned int * d_random_index;
+  CUDA_CALL(cudaMalloc(&d_random_index, sizeof(unsigned int) * n * epoch));
+  curandGenerator_t gen;
+  CURAND_CALL(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
+  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, 1234ULL)); // TODO: seed with time
+  CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
+
+  cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
+
+
+  for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
+    memset(delta_mean_z, 0, sizeof(double) * dim);
+    CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
+    
+    zCalculate <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
+      (d_x_a, d_y, d_z_a, d_mean_z, d_delta_z, d_random_index, k,
+       n, dim, alpha, s, NUM_AGENT);
+    
+    zUpdate <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
+      (d_z_a, d_delta_z, d_random_index, k,
+       n, dim, NUM_AGENT);
+    //--------The following code enforce z_mean consistency somehow inefficiently-----------
+    // memset(mean_z, 0, sizeof(double) * dim);
+    // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));  // < 0.01s
+    // reduction_sum_divided <<< n / 1024, 1024>>> (d_z_a, d_mean_z, dim, n, n); // 0.35 s 
+    //---------------------------------------------------------------
+
+    //------------------------One way to calculate delta_mean_z-------------------------
+
+    // reduction_sum_divided <<< NUM_AGENT / 1024, 1024>>>
+    //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
+
+    //------------------Another way to calculate delta_mean_z----------------------------
+    parallel_sum_divided <<< 1 + (dim - 1) / BLOCKSIZE, BLOCKSIZE>>>
+      (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
+                                  
+    //---------------------------------------------------------------------------------
+
+    //---------------Comment out the following code when enforcing z_mean consistency------------
+
+    mean_zUpdate <<< 1 + (dim - 1) / BLOCKSIZE, BLOCKSIZE>>>
+      (d_delta_mean_z, d_mean_z, dim);
+    //-------------------------------------------------------------------------------------------
+    
+  }
+  cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
+  cout << "elapsed time: " << elapsed.count() << " s\n";
+  
+  CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
+  
+  for (int i = 0; i < 4; i++) printf("%.15f\n", mean_z[i]);
+
+  plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
+  double * ptr = mxGetPr(plhs[0]);
+  
+  for (int c = 0; c < dim; c++)
+    ptr[c] = mean_z[c];
+  
+  cudaFree(d_z_a);
+  cudaFree(d_mean_z);
+  cudaFree(d_x_a);
+  cudaFree(d_y);
+  cudaFree(d_delta_mean_z);
+  cudaFree(d_delta_z);
+
+
+  delete [] z_a; 
+  delete [] mean_z; 
+  delete [] delta_mean_z; 
+}
