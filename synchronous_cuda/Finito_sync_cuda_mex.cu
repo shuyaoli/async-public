@@ -22,6 +22,7 @@
 #define WARP_SIZE 32
 
 using namespace std;
+
 __global__ void zCalculate(const double* __restrict__ x_a,
                            const double* __restrict__ y,
                            const double* __restrict__ z_a,
@@ -181,14 +182,15 @@ void mexFunction(int nlhs, mxArray *plhs[],
   const int NUM_AGENT = *mxGetPr(prhs[5]);
   const int BLOCKSIZE = *mxGetPr(prhs[6]);
 
+  double* z_a = mxGetPr(prhs[7]);
+  double* mean_z = mxGetPr(prhs[8]);
+  
   double *d_x_a, *d_y;
   CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
   CUDA_CALL(cudaMalloc(&d_y, sizeof(double) * n ));
   CUDA_CALL(cudaMemcpy(d_x_a, x_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
   CUDA_CALL(cudaMemcpy(d_y, y, sizeof(double) * n, cudaMemcpyHostToDevice));
   
-  double* z_a =  new double[n * dim]();
-  double* mean_z = new double [dim]();
   double *d_z_a, *d_mean_z;
   CUDA_CALL(cudaMalloc(&d_z_a, sizeof(double) * n * dim));
   CUDA_CALL(cudaMalloc(&d_mean_z, sizeof(double) * dim));                 
@@ -250,17 +252,28 @@ void mexFunction(int nlhs, mxArray *plhs[],
     
   }
   cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
-  cout << "elapsed time: " << elapsed.count() << " s\n";
+
+  cout<< endl
+      <<"NUM_AGENT: " << NUM_AGENT << endl
+      <<"BLOCKSIZE: " << BLOCKSIZE << endl
+      <<"elapsed time: "<<elapsed.count()<<" s"<<endl
+      << endl;
   
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
-  
-  for (int i = 0; i < 4; i++) printf("%.15f\n", mean_z[i]);
+  CUDA_CALL(cudaMemcpy(z_a, d_z_a, sizeof(double) * dim * n, cudaMemcpyDeviceToHost));
 
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
-  double * ptr = mxGetPr(plhs[0]);
+  plhs[1] = mxCreateDoubleMatrix(1, n * dim, mxREAL);
+
+  
+  double * ptr0 = mxGetPr(plhs[0]);
+  double * ptr1 = mxGetPr(plhs[1]);
   
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c];
+    ptr0[c] = mean_z[c];
+
+  for (int c = 0; c < dim * n; c++)
+    ptr1[c] = z_a[c];
   
   cudaFree(d_z_a);
   cudaFree(d_mean_z);
@@ -269,8 +282,5 @@ void mexFunction(int nlhs, mxArray *plhs[],
   cudaFree(d_delta_mean_z);
   cudaFree(d_delta_z);
 
-
-  delete [] z_a; 
-  delete [] mean_z; 
   delete [] delta_mean_z; 
 }

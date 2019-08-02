@@ -125,10 +125,9 @@ void mexFunction(int nlhs, mxArray *plhs[],
   cudaDeviceSynchronize();end=chrono::high_resolution_clock::now();elapsed=end-start;
   
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
-
-  for (int i = 0; i < 4; i++) printf("%.15f\n", mean_z[i]);
   
-  cout<<"NUM_AGENT: " << NUM_AGENT << endl
+  cout<< endl
+      <<"NUM_AGENT: " << NUM_AGENT << endl
       <<"BLOCKSIZE: " << BLOCKSIZE << endl
       <<"elapsed time: "<<elapsed.count()<<" s"<<endl
       << endl;
