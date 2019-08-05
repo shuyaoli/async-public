@@ -147,11 +147,9 @@ void mexFunction(int nlhs, mxArray *plhs[],
       // update iteration counter
       
       itr_ctr--;
-
-      elapsed += (end - start);
-
     }
     auto end = chrono::high_resolution_clock::now();
+    elapsed += (end - start);
     print_mutex.lock();
     cout << "elapsed time: " << elapsed.count() << " s\n";
     print_mutex.unlock();

@@ -7,11 +7,11 @@ seed = 1;
 err = 0.01; 
 rng(seed);
 
-n = 4000; 
-dim = 300; 
+n = 4096; 
+dim = 256; 
 
 alpha = 0.5;
-epoch = 64;
+epoch = 32;
 
 s = 1; % regularizer
 
@@ -25,7 +25,12 @@ if SAVE_CUDA_DATA
         writematrix(y, '../data/SMALL/y')
     end
     
-    
+    if n == 4096 && dim == 256
+        x_a = x';
+        x_a = x_a(:);
+        writematrix(x_a, '../data/MID/x_a');
+        writematrix(y, '../data/MID/y')
+    end
     
     if n == 8192 && dim == 1024
         x_a = x';
