@@ -6,7 +6,7 @@ Initialize;
 
 tic
 
-numthread = 8;
+numthread = 16;
 
 db_trained = scd_async_parallel(x, y, alpha, s, epoch * dim, numthread);
 

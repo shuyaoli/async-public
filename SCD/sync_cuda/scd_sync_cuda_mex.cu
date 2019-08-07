@@ -22,11 +22,28 @@
 
 using namespace std;
 
+__global__ void dotsCalculate (const double* __restrict__ x_a,
+                               const double* __restrict__ delta_z,
+                               const unsigned int* __restrict__ random_index,
+                               double* dots,
+                               int itr,
+                               int n, int dim, int NUM_AGENT) {
+  const int idx = blockDim.x * blockIdx.x + threadIdx.x;
+  if (idx < n) {
+    for (int i = 0; i < NUM_AGENT; i++) {
+      int ik = random_index[itr * NUM_AGENT + i] % dim;
+      dots[idx] += delta_z[i] * x_a[idx + ik * n];
+    }
+  }
+}
+
+
 __global__ void zCalculate(const double* __restrict__ x_a,
                            const double* __restrict__ y,
                            const double* __restrict__ z,
                            double* delta_z,
                            const unsigned int* __restrict__ random_index,
+                           const double* __restrict__ dots,
                            int itr,
                            int n, int dim, double alpha, double s, int NUM_AGENT)
 {
@@ -39,17 +56,15 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   double result = 0;
 
   for (int r = lane; r < n; r += WARP_SIZE) {
-    double dot = 0;
-    for (int c = 0; c < dim; c++)
-      dot += z[c] * x_a[r + c * n]; //TODO: shared across global memory
-    result += -1.0 / (1+exp(y[r] * dot)) * y[r] * x_a[r + ik * n] + s * z_ik;
+    result += -1.0 / (1+exp(y[r] * dots[r])) * y[r] * x_a[r + ik * n];
   }
 
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2)
     result += __shfl_down_sync(0xffffffff, result, offset);
 
+  result = - alpha * (result / n + s * z_ik);
   if (lane == 0)
-    delta_z[warpIdx] = result;  
+    delta_z[warpIdx] = result;
 }
 
 void mexFunction(int nlhs, mxArray *plhs[],
@@ -65,12 +80,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
   const int max_itr = *mxGetPr(prhs[4]);
   const int NUM_AGENT = *mxGetPr(prhs[5]);
   const int BLOCKSIZE = *mxGetPr(prhs[6]);
-
-  const double* z_readOnly = mxGetPr(prhs[7]);
-
-  double *z = new double[dim];
-  for (int c = 0; c < dim; c++)
-    z[c] = z_readOnly[c];
+  double* z = mxGetPr(prhs[7]);
     
   double *d_x_a, *d_y;
   CUDA_CALL(cudaMalloc(&d_x_a, sizeof(double) * n * dim));
@@ -97,22 +107,29 @@ void mexFunction(int nlhs, mxArray *plhs[],
   CURAND_CALL(curandGenerate(gen, d_random_index, max_itr));
   CUDA_CALL(cudaMemcpy(random_index, d_random_index, sizeof(unsigned int) * max_itr, cudaMemcpyDeviceToHost));
 
+  double *d_dots, *dots;
+  CUDA_CALL(cudaMalloc(&d_dots, sizeof(double) * n));
+  dots = new double [n]();
+  CUDA_CALL(cudaMemcpy(d_dots, dots, sizeof(double) * n, cudaMemcpyHostToDevice));
+
   
   cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
 
 
   for (int k = 0; k < max_itr / NUM_AGENT; k++) {
-    
     zCalculate <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
-      (d_x_a, d_y, d_z, d_delta_z, d_random_index, k,
+      (d_x_a, d_y, d_z, d_delta_z, d_random_index, d_dots, k,
        n, dim, alpha, s, NUM_AGENT);
   
+    dotsCalculate <<< 1 + (n - 1) / BLOCKSIZE, BLOCKSIZE >>>
+      (d_x_a, d_delta_z, d_random_index, d_dots, k, n, dim, NUM_AGENT);
+    
     CUDA_CALL(cudaMemcpy(delta_z, d_delta_z, sizeof(double) * NUM_AGENT, cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaMemcpy(z, d_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
 
     for (int i = 0; i < NUM_AGENT; i++) {
       int ik = random_index[k * NUM_AGENT + i] % dim;
-      z[ik] += -alpha * delta_z[i] / n;
+      z[ik] += delta_z[i];
     }
     
     CUDA_CALL(cudaMemcpy(d_z, z, sizeof(double) * dim, cudaMemcpyHostToDevice));    
@@ -138,4 +155,9 @@ void mexFunction(int nlhs, mxArray *plhs[],
   cudaFree(d_x_a);
   cudaFree(d_y);
   cudaFree(d_delta_z);
+  cudaFree(d_random_index);
+  cudaFree(d_dots);
+
+  delete[] delta_z;
+  delete[] random_index;
 }

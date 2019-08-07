@@ -123,7 +123,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
   atomic_int itr_ctr(max_itr / num_thread * num_thread); // Tracking iteration
   
-  Barrier read_barrier(0), itr_barrier(0);
+  Barrier read_barrier(0), itr_barrier(0), dots_barrier(0);
   mutex *coord_mutex = new mutex [dim] ();
   mutex print_mutex; // For coordinating output of different threads.
   
@@ -132,13 +132,14 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   
   // atomic <double> *z = new atomic <double> [dim] ();
   double *z = new double [dim] ();
-  
+  atomic <double> *dots = new atomic <double> [n] ();
   // Prepare threads
   // iterate is a lambda expression with by-reference (&) capture mode
   // outside variables referenced in lambda body is accessed by reference
-  auto iterate = [&]() {
+  auto iterate = [&](int threadIdx) {
     // Allocate local memory for each thread
-    double *old_z = new double [dim];
+    double old_z_ik, delta_z;
+    double* old_dots = new double [n];
     // chrono :: duration <double> elapsed;
     while (itr_ctr.load() > 0) {
       // update iteration counter
@@ -146,41 +147,41 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
       itr_barrier.mod_incr_and_sync(num_thread); 
 
-      /*****************************START*****************************/
+      /*********START**********/      
       int ik = intRand(0, dim - 1);
 
-      // Read mean_z, 0.54s / 25s
-      for (int c = 0; c < dim; c++) {
-        old_z[c] = z[c];
-      }
-
+      for (int r = 0; r < n; r++)
+        old_dots[r] = dots[r].load();
+      old_z_ik = z[ik];
       // Read is done
       read_barrier.mod_incr(num_thread); // < 0.01s
-   
-      double delta_z = 0;
+
+      delta_z = 0;
       for (int r = 0; r < n; r++) {
-        double dot = 0;
-        for (int c = 0; c < dim; c++) 
-          dot += old_z[c] * x_v[r][c];
-        delta_z += -1.0 / (1+exp(y[r] * dot)) * y[r] * x_v[r][ik] + s * old_z[ik];
+        delta_z +=
+          -1.0 / (1+exp(y[r] * old_dots[r])) * y[r] * x_v[r][ik];
       }
 
       delta_z *= -alpha / n;
+      delta_z += -alpha * s * old_z_ik;
       
-
-      /******************SYNCHRONIZATION*******************************/
+      /******************SYNCHRONIZATION************/
       read_barrier.sync(); 
-      /***************************************************************/
+      /*********************************************/
+      for (int r = 0; r < n; r++) {
+        atomic_double_add(dots[r], delta_z * x_v[r][ik]);
+      }
+      
       coord_mutex[ik].lock();
       z[ik] += delta_z;
       coord_mutex[ik].unlock();
+
+
     }
     
     // print_mutex.lock();
     // std::cout << "C++ code elapsed time: " << elapsed.count() << " s\n";
     // print_mutex.unlock();
-
-    delete[] old_z;
   };
   
   // Execute threads
@@ -188,7 +189,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   chrono :: duration <double> elapsed (0);
   auto start = chrono :: high_resolution_clock::now();
   for (int i = 0; i < num_thread; i++)
-    threads.push_back(thread(iterate));
+    threads.push_back(thread(iterate, i));
   for (auto& t: threads) t.join();
   auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
   cout << "high_resolution_clock elapsed time: " << elapsed.count() << " s\n";
@@ -201,6 +202,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     ptr[c] = z[c]; 
   
   delete[] z;
+  delete[] dots;
   
   delete_nested_ptr(x_v,n);
 }

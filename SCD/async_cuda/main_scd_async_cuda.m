@@ -1,4 +1,4 @@
-mexcuda NVCCFLAGS='-m64 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LINKLIBS='\$LINKLIBS -L/usr/local/cuda/lib64 -lcurand'  scd_sync_cuda_mex.cu
+mexcuda NVCCFLAGS='-m64 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LINKLIBS='\$LINKLIBS -L/usr/local/cuda/lib64 -lcurand'  scd_async_cuda_mex.cu
 
 addpath('../../routine_work/');
 
@@ -12,7 +12,7 @@ tic
 
 NUM_AGENT = 256;
 BLOCKSIZE = 256;
-db_trained = scd_sync_cuda_mex(x_a, y, alpha, s, 40 * dim, NUM_AGENT, BLOCKSIZE, zeros(1, dim));
+db_trained = scd_async_cuda_mex(x_a, y, alpha, s, 40 * dim, NUM_AGENT, BLOCKSIZE, zeros(1, dim));
 
 toc
 
