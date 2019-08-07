@@ -151,7 +151,6 @@ void mexFunction(int nlhs, mxArray *plhs[],
   for (int c = 0; c < dim; c++)
     ptr0[c] = z[c];
   
-
   cudaFree(d_x_a);
   cudaFree(d_y);
   cudaFree(d_delta_z);

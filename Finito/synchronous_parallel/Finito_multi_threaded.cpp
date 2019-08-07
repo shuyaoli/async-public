@@ -102,23 +102,6 @@ inline void atomic_double_add (atomic <double> &p, double a) noexcept{
 //   }
 // }
 
-double** array2rowvectors (const double *array, int num_row, int num_col) {
-  // return a vector of row vectors
-  // Test: 
-  //     input {1,2,3,4,5,6}, 
-  //     output 
-  //            1 3 5
-  //            2 4 6
-  double** matrix = new double* [num_row];
-  for (int r = 0; r < num_row; r++) {
-    matrix[r] = new double[num_col];
-    for (int c = 0; c < num_col; c++) {
-      matrix[r][c] = array[c * num_row + r];
-    }
-  }
-  return matrix;
-}
-
 void delete_nested_ptr (double **x, int M) {
   for (int i = 0; i < M; i++)
     delete [] x[i];
@@ -139,12 +122,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   const int epoch = *mxGetPr(prhs[4]);
   const int num_thread = *mxGetPr(prhs[5]);
     
-  double** x_v = array2rowvectors (x, n, dim);  //new
+  double* x_a = new double [n * dim];
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < dim; c++)
+      x_a[dim * r + c] = x[r + c * n];
 
-  double** z_v = new double* [n];
-  for (int r = 0; r < n; r++) {
-    z_v[r] = new double [dim] ();
-  }
+  double* z_a = new double [n * dim] ();
 
   atomic_int itr_ctr(epoch * n / num_thread * num_thread); // Tracking iteration
   
@@ -167,7 +150,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     while (itr_ctr.load() > 0) { // This loop takes 23s/25s
       // update iteration counter
       itr_ctr--;
-
       itr_barrier.mod_incr_and_sync(num_thread); // 2.5s / 25s
 
       /*****************************START*****************************/
@@ -179,18 +161,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }
 
       // Read is done
-
       read_barrier.mod_incr(num_thread); // < 0.01s
    
       //dot = <old_mean_z, x[ik]>, 1.3s / 25s
       double dot = 0;
-      for (int i = 0; i < dim; i++) 
-        dot += old_mean_z[i] * x_v[ik][i];
-
+      for (int c = 0; c < dim; c++) 
+        dot += old_mean_z[c] * x_a[ik * dim + c];
       
       //delta_z = mean_z - z[ik] - alpha * grad_f[ik], 11s / 25s
       for (int c =  0; c < dim; c++) 
-        delta_z[c] = old_mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * old_mean_z[c]);
+        delta_z[c] = old_mean_z[c] - z_a[ik * dim + c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[ik * dim + c] + s * old_mean_z[c]);
 
       // Now delta_z is delta_z_ik
 
@@ -202,7 +182,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
  
       block_mutex[ik].lock();
       for (int c = 0; c < dim; c++) {
-        z_v[ik][c] += delta_z[c];
+        z_a[ik * dim + c] += delta_z[c];
       }
       block_mutex[ik].unlock();
 
@@ -210,7 +190,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       /******************SYNCHRONIZATION*******************************/
       read_barrier.sync(); // 0.4s / 25s
       /***************************************************************/
-      // auto end = chrono::high_resolution_clock::now();
       
       // increament mean_z, 5.5s / 25s
       // mean_z += delta_z / n
@@ -249,10 +228,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   // double * ptr1 = mxGetPr(plhs[1]);
   // for (int r = 0; r < n; r++)
   //   for (int c = 0; c < dim; c++)
-  //     ptr1[r+c*n] = z_v[r][c];
+  //     ptr1[r+c*n] = z_a[r * dim + c];
   
   delete[] mean_z;
   
-  delete_nested_ptr(x_v,n);
-  delete_nested_ptr(z_v,n);
+  delete[] x_a;
+  delete[] z_a;
 }

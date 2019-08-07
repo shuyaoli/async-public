@@ -6,7 +6,7 @@ Initialize;
 disp('Start calculation');
 tic
 
-db_trained = Finito_async_lock_free(x, y, alpha, s, epoch, 8);
+db_trained = Finito_async_lock_free(x, y, alpha, s, epoch, 16);
 
 toc
 

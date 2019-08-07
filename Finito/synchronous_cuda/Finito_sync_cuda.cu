@@ -22,12 +22,9 @@
 #define UPDATE_BLOCKSIZE 128
 #define SUM_BLOCKSIZE 128
 #define MEAN_BLOCKSIZE 128
-
 // zCalculate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
 // zUpdate    <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
-
 // parallel_sum_divided <<< dim / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>> (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
-
 // mean_zUpdate <<< dim / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE >>> (d_delta_mean_z, d_mean_z);
 
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
@@ -78,7 +75,7 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   //   s_mean_z[c] = mean_z[c];
   // __syncwarp();
 
-  // Correct. Slower than previous one. Pessimization
+  // Correct. Slower than previous one.
   // __shared__ double s_mean_z[dim];
   // for (int c = 0; c < dim; c++)
   //   s_mean_z[c] = mean_z[c];
@@ -108,7 +105,6 @@ __global__ void zUpdate(double* __restrict__ z_a,
   const int lane = idx % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
   const int warpIdx = idx / WARP_SIZE;
   const int ik =  random_index[itr * NUM_AGENT + warpIdx] % n;
-  //XXX Non-coalesced memory access XXX
   for (int c = lane; c < dim; c+=WARP_SIZE) {
     // z_a[ik * dim + c] +=  delta_z[warpIdx * dim + c];
     // atomic gives 50ms performance loss in total for a medium dataset
@@ -191,29 +187,18 @@ int main()
     
     zUpdate <<< NUM_AGENT * WARP_SIZE / UPDATE_BLOCKSIZE, UPDATE_BLOCKSIZE>>>
       (d_z_a, d_delta_z, d_random_index, k);
-    //--------The following code enforce z_mean consistency somehow inefficiently-----------
-    // memset(mean_z, 0, sizeof(double) * dim);
-    // CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));  // < 0.01s
-    // reduction_sum_divided <<< n / 1024, 1024>>> (d_z_a, d_mean_z, dim, n, n); // 0.35 s 
-    //---------------------------------------------------------------
 
-    //------------------------One way to calculate delta_mean_z-------------------------
-
+    //------------------------One way to calculate delta_mean_z-------------------
     // reduction_sum_divided <<< NUM_AGENT / 1024, 1024>>>
     //   (d_delta_z, d_delta_mean_z, dim, NUM_AGENT, n); // 0.35 s
 
-    //------------------Another way to calculate delta_mean_z----------------------------
+    //------------------Another way to calculate delta_mean_z---------------------
     parallel_sum_divided <<< 1 + (dim - 1) / SUM_BLOCKSIZE, SUM_BLOCKSIZE>>>
       (d_delta_z, d_delta_mean_z, NUM_AGENT, dim, n);
-                                  
-    //---------------------------------------------------------------------------------
-
-    //---------------Comment out the following code when enforcing z_mean consistency------------
+    //----------------------------------------------------------------------------
 
     mean_zUpdate <<< 1 + (dim - 1) / MEAN_BLOCKSIZE, MEAN_BLOCKSIZE>>>
-      (d_delta_mean_z, d_mean_z, dim);
-    //-------------------------------------------------------------------------------------------
-    
+      (d_delta_mean_z, d_mean_z, dim); 
   }
   cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
   cout << "elapsed time: " << elapsed.count() << " s\n";
@@ -257,49 +242,6 @@ void read_var(double* var, string var_name, int len)
   var_file.close();
 }
 
-__global__ void reduction_sum_divided(const double* __restrict__ v,
-                                     double* __restrict__ sum_v,
-                                     int num_row, int num_col, double div) {
-  // Lauch num_col threads in total
-  
-  // Holds intermediates in shared memory reduction
-  __syncthreads();
-  __shared__ double buffer[1024/WARP_SIZE];
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int lane = threadIdx.x % WARP_SIZE;
-
-  for (int k = 0; k < num_row; k++) {
-    int j = (k + blockIdx.x) % num_row;
-    //j = k;
-    double temp;
-    // All threads in a block of 1024 take an element
-    temp = v[i + num_col * j];
-    
-    // All warps in this block (32) compute the sum of all
-    // threads in their warp
-    for(int delta = WARP_SIZE/2; delta > 0; delta /= 2)
-      temp += __shfl_xor_sync(0xffffffff, temp, delta);
-
-    // Write all 32 of these partial sums to shared memory
-    if(lane == 0)
-      buffer[threadIdx.x / WARP_SIZE] = temp / div;
-    
-    __syncthreads();
-
-    // Add the remaining 32 partial sums using a single warp
-    if(threadIdx.x < WARP_SIZE) {
-      temp = buffer[threadIdx.x];
-      for(int delta = WARP_SIZE / 2; delta > 0; delta /= 2)
-        temp += __shfl_xor_sync(0xffffffff,temp, delta);
-    }
-
-    // Add this block's sum to the total sum
-    if(threadIdx.x == 0)
-      atomicAdd(sum_v+j, temp);  
-    // sum_v[j] += temp;
-  }
-}
-
 __global__ void parallel_sum_divided(const double* __restrict__ v,
                                      double* __restrict__ sum_v,
                                      int num_row, int num_col, double div) {
@@ -330,4 +272,47 @@ __global__ void parallel_sum_divided(const double* __restrict__ v,
 //   } while (assumed != old);
 
 //   return __longlong_as_double(old);
+// }
+
+// __global__ void reduction_sum_divided(const double* __restrict__ v,
+//                                      double* __restrict__ sum_v,
+//                                      int num_row, int num_col, double div) {
+//   // Lauch num_col threads in total
+  
+//   // Holds intermediates in shared memory reduction
+//   __syncthreads();
+//   __shared__ double buffer[1024/WARP_SIZE];
+//   int i = blockIdx.x * blockDim.x + threadIdx.x;
+//   int lane = threadIdx.x % WARP_SIZE;
+
+//   for (int k = 0; k < num_row; k++) {
+//     int j = (k + blockIdx.x) % num_row;
+//     //j = k;
+//     double temp;
+//     // All threads in a block of 1024 take an element
+//     temp = v[i + num_col * j];
+    
+//     // All warps in this block (32) compute the sum of all
+//     // threads in their warp
+//     for(int delta = WARP_SIZE/2; delta > 0; delta /= 2)
+//       temp += __shfl_xor_sync(0xffffffff, temp, delta);
+
+//     // Write all 32 of these partial sums to shared memory
+//     if(lane == 0)
+//       buffer[threadIdx.x / WARP_SIZE] = temp / div;
+    
+//     __syncthreads();
+
+//     // Add the remaining 32 partial sums using a single warp
+//     if(threadIdx.x < WARP_SIZE) {
+//       temp = buffer[threadIdx.x];
+//       for(int delta = WARP_SIZE / 2; delta > 0; delta /= 2)
+//         temp += __shfl_xor_sync(0xffffffff,temp, delta);
+//     }
+
+//     // Add this block's sum to the total sum
+//     if(threadIdx.x == 0)
+//       atomicAdd(sum_v+j, temp);  
+//     // sum_v[j] += temp;
+//   }
 // }

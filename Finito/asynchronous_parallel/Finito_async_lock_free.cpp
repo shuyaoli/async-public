@@ -29,7 +29,7 @@ inline int intRand(const int & min, const int & max) noexcept{
   return distribution(*generator);
 }
 
-inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
+inline void atomic_double_add (atomic <double> &p, double a) noexcept {
   double old = p.load();
   double desired;
   do {
@@ -37,15 +37,10 @@ inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
   } while(!p.compare_exchange_weak(old, desired));
 }
 
-// inline void atomic_vector_increment(atomic <double> x[], double incr[], int dim) noexcept{
-//   for (int i = 0; i < dim; i++)
-//     atomic_double_fetch_add (x[i], incr[i]);
-// }
-
 // A suggested, possibly optimized version of cas;
 // But for now I don't understand memory order
 
-// void atomic_double_fetch_add (atomic <double> &p,
+// void atomic_double_add (atomic <double> &p,
 //                            double a) {
 //   double old = p.load(std::memory_order_consume);
 //   double desired = old + a;
@@ -54,23 +49,6 @@ inline void atomic_double_fetch_add (atomic <double> &p, double a) noexcept {
 //     desired = old + a;
 //   }
 // }
-
-
-inline double** array2rowvectors (const double *array, int num_row, int num_col) noexcept {
-  // return a vector of row vectors, e.g.
-  //     input {1,2,3,4,5,6}, 
-  //     output 
-  //            1 3 5
-  //            2 4 6
-  double** matrix = new double* [num_row];
-  for (int r = 0; r < num_row; r++) {
-    matrix[r] = new double[num_col];
-    for (int c = 0; c < num_col; c++) {
-      matrix[r][c] = array[c * num_row + r];
-    }
-  }
-  return matrix;
-}
 
 
 void mexFunction(int nlhs, mxArray *plhs[],
@@ -89,12 +67,12 @@ void mexFunction(int nlhs, mxArray *plhs[],
   const int epoch = *mxGetPr(prhs[4]);
   const int num_thread = *mxGetPr(prhs[5]);
     
-  double** x_v = array2rowvectors(x, n, dim);  //new
+  double* x_a = new double [n * dim];
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < dim; c++)
+      x_a[dim * r + c] = x[r + c * n];
 
-  double** z_v = new double* [n];
-  for (int r = 0; r < n; r++) {
-    z_v[r] = new double [dim] ();
-  }
+  double* z_a = new double [n * dim] ();
 
   atomic_int itr_ctr(epoch * n); // Tracking iteration
   mutex* block_mutex = new mutex [n];
@@ -107,45 +85,42 @@ void mexFunction(int nlhs, mxArray *plhs[],
     // Allocate local memory for each thread
     
     chrono :: duration <double > elapsed (0);
-    
+    // double delta_buffer; //It's not as fast as using delta_z
     double *delta_z = new double [dim];
     auto start = chrono::high_resolution_clock::now();
+    
     while (itr_ctr.load() > 0) { // This loop takes 16.8s / 18.1s
       int ik = intRand(0, n - 1);
 
       // Calculation for delta_z_ik
-
       //dot = <old_mean_z, x[ik]>, 1.0s / 18s
-
       double dot = 0;
-      for (int i = 0; i < dim; i++) 
-        dot += mean_z[i] * x_v[ik][i];
+      for (int c = 0; c < dim; c++) 
+        dot += mean_z[c] * x_a[ik * dim + c];
      
       //delta_z = mean_z - z[ik] - alpha * grad_f[ik], 12s / 18s
-      
-      for (int c =  0; c < dim; c++) 
-        delta_z[c] = mean_z[c] - z_v[ik][c] - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_v[ik][c] + s * mean_z[c]);
-
+      for (int c =  0; c < dim; c++) {
+        delta_z[c] = mean_z[c] - z_a[ik * dim + c]
+          - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[ik * dim + c] + s * mean_z[c]);
+        // atomic_double_add(z_a[ik * dim + c], delta_buffer);
+        // atomic_double_add(mean_z[c], delta_buffer/n);
+      }
       // Now delta_z is delta_z_i
 
 
-      // update z_v[ik]
+      // update z[ik], block lock faster than atomic variable
       // z[ik] += delta[z], 0.8s / 18s
-
       block_mutex[ik].lock();
       for (int c = 0; c < dim; c++)
-        z_v[ik][c] += delta_z[c];
+        z_a[ik * dim + c] += delta_z[c];
       block_mutex[ik].unlock();
       
-
       // increment mean_z, 3.1 - 4.0 s
       // mean_z += delta_z / n
       for (int c = 0; c < dim; c++)
-        atomic_double_fetch_add (mean_z[c], delta_z[c]/n);
-
-
-      // update iteration counter
+        atomic_double_add(mean_z[c], delta_z[c]/n);
       
+      // update iteration counter
       itr_ctr--;
     }
     auto end = chrono::high_resolution_clock::now();
@@ -172,18 +147,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
   for (int c = 0; c < dim; c++)
     ptr[c] = mean_z[c].load();
   
-  delete[] mean_z;
-  
-  for (int i = 0; i < n; i++)
-    delete [] x_v[i];
-  delete []x_v;
-
-  for (int i = 0; i < n; i++)
-    delete [] z_v[i];
-  delete []z_v;
-  
-  // atomic <double> test;
-  // cout << boolalpha
-  //      <<"atomic <double>  is lock free? "
-  //      << test.is_lock_free() << '\n';
+  delete [] mean_z;
+  delete [] x_a;
+  delete [] z_a;
+  delete [] block_mutex;
 }

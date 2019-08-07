@@ -29,29 +29,6 @@ inline void atomic_double_add (atomic <double> &p, double a) noexcept{
   } while(!p.compare_exchange_weak(old, desired));
 }
 
-double** array2rowvectors (const double *array, int num_row, int num_col) {
-  // return a vector of row vectors
-  // Test: 
-  //     input {1,2,3,4,5,6}, 
-  //     output 
-  //            1 3 5
-  //            2 4 6
-  double** matrix = new double* [num_row];
-  for (int r = 0; r < num_row; r++) {
-    matrix[r] = new double[num_col];
-    for (int c = 0; c < num_col; c++) {
-      matrix[r][c] = array[c * num_row + r];
-    }
-  }
-  return matrix;
-}
-
-void delete_nested_ptr (double **x, int M) {
-  for (int i = 0; i < M; i++)
-    delete [] x[i];
-  delete[]x;
-}
-
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
   //     Input: x, y, initial random weight phi, alpha, s, epoch
@@ -59,14 +36,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   const int n = mxGetDimensions(prhs[0])[0];
   const int dim = mxGetDimensions(prhs[0])[1];
     
-  const double* x = mxGetPr(prhs[0]);
+  const double* x_a = mxGetPr(prhs[0]);
   const double* y = mxGetPr(prhs[1]);
   const double alpha = *mxGetPr(prhs[2]);
   const double s = *mxGetPr(prhs[3]);
   const int max_itr = *mxGetPr(prhs[4]);
   const int num_thread = *mxGetPr(prhs[5]);
-  
-  double** x_v = array2rowvectors (x, n, dim);  //new
 
 
   atomic_int itr_ctr(max_itr / num_thread * num_thread); // Tracking iteration
@@ -98,14 +73,14 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       double delta_z = 0;
       
       for (int r = 0; r < n; r++) {
-        delta_z += -1.0 / (1+exp(y[r] * dots[r])) * y[r] * x_v[r][ik];
+        delta_z += -1.0 / (1+exp(y[r] * dots[r])) * y[r] * x_a[r + n *ik];
       }
       
       delta_z *= -alpha / n;
       delta_z += -alpha * s * z[ik];
       
       for (int r = 0; r < n; r++) {
-        atomic_double_add(dots[r], delta_z * x_v[r][ik]);
+        atomic_double_add(dots[r], delta_z * x_a[r + n * ik]);
       }
       
       coord_mutex[ik].lock();
@@ -137,6 +112,4 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     ptr[c] = z[c]; 
   
   delete[] z;
-  
-  delete_nested_ptr(x_v,n);
 }
