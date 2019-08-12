@@ -8,14 +8,12 @@ x_a = x';
 x_a = x_a(:);
 disp('Start calculation');
 
-
-
 tic
 
 NUM_AGENT = 1024;
 BLOCKSIZE = 128;
-db_trained = Finito_sync_cuda_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE, zeros(1, dim * n), zeros(1, dim));
-
+[db_trained, z_a] = Finito_sync_cuda_mex(x_a, y, alpha, s, epoch/2, NUM_AGENT, BLOCKSIZE, zeros(1, dim * n), zeros(1, dim));
+db_trained= Finito_sync_cuda_mex(x_a, y, alpha, s, epoch/2, NUM_AGENT, BLOCKSIZE, z_a, db_trained);
 toc
 
 result = x * db_trained' > 0;

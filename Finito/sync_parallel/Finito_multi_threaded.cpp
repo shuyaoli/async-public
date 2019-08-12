@@ -146,7 +146,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     // Allocate local memory for each thread
     double *old_mean_z = new double [dim];
     double *delta_z = new double [dim];
-    // chrono :: duration <double> elapsed;
+    
     while (itr_ctr.load() > 0) { // This loop takes 23s/25s
       // update iteration counter
       itr_ctr--;
@@ -186,7 +186,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       }
       block_mutex[ik].unlock();
 
-      // auto start = chrono::high_resolution_clock::now();
       /******************SYNCHRONIZATION*******************************/
       read_barrier.sync(); // 0.4s / 25s
       /***************************************************************/
@@ -197,33 +196,32 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         atomic_double_add(mean_z[c], delta_z[c] / n);
       }
 
-      // elapsed += end - start;
     }
-    
-    // print_mutex.lock();
-    // std::cout << "C++ code elapsed time: " << elapsed.count() << " s\n";
-    // print_mutex.unlock();
-    
     delete[] delta_z;
     delete[] old_mean_z;
   };
 
   // Execute threads
   vector <thread> threads;
-  chrono :: duration <double> elapsed (0);
+  chrono :: duration <double> elapsed;
   auto start = chrono :: high_resolution_clock::now();
   for (int i = 0; i < num_thread; i++)
     threads.push_back(thread(iterate));
   for (auto& t: threads) t.join();
-  auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
+  auto end = chrono::high_resolution_clock::now();
+  elapsed = end - start;
   cout << "high_resolution_clock elapsed time: " << elapsed.count() << " s\n";
   // MATLAB Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
-  double * ptr = mxGetPr(plhs[0]);
+  double * ptr0 = mxGetPr(plhs[0]);
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c].load(); 
+    ptr0[c] = mean_z[c].load(); 
 
+  plhs[1] = mxCreateDoubleMatrix(1,1,mxREAL);
+  double* ptr1 = mxGetPr(plhs[1]);
+  *ptr1 = elapsed.count();
+  
   // plhs[1] = mxCreateNum_TMatrix(n, dim, mxREAL);
   // double * ptr1 = mxGetPr(plhs[1]);
   // for (int r = 0; r < n; r++)
@@ -231,7 +229,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   //     ptr1[r+c*n] = z_a[r * dim + c];
   
   delete[] mean_z;
-  
   delete[] x_a;
   delete[] z_a;
 }

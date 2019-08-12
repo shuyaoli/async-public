@@ -22,6 +22,7 @@
 #define WARP_SIZE 32
 
 using namespace std;
+using namespace std::chrono;
 
 __global__ void zCalculate(const double* __restrict__ x_a,
                            const double* __restrict__ y,
@@ -204,18 +205,18 @@ void mexFunction(int nlhs, mxArray *plhs[],
   double* d_delta_mean_z;
   CUDA_CALL(cudaMalloc(&d_delta_mean_z, sizeof(double) * dim));
 
-  chrono :: duration <double> elapsed (0);
-
   unsigned int * d_random_index;
+  auto now_clock = time_point_cast<milliseconds>(system_clock::now());
+  auto seed = now_clock.time_since_epoch().count();
   CUDA_CALL(cudaMalloc(&d_random_index, sizeof(unsigned int) * n * epoch));
   curandGenerator_t gen;
   CURAND_CALL(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
-  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, 1234ULL)); // TODO: seed with time
+  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, seed));
   CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
-
+  
+  chrono :: duration <double> elapsed (0);
   cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
-
-
+  
   for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
     memset(delta_mean_z, 0, sizeof(double) * dim);
     CUDA_CALL(cudaMemcpy(d_delta_mean_z, delta_mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
