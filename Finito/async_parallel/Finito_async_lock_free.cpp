@@ -83,11 +83,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
   auto iterate = [&]() {
     // Allocate local memory for each thread
-    
-    chrono :: duration <double > elapsed (0);
-    // double delta_buffer; //It's not as fast as using delta_z
     double *delta_z = new double [dim];
-    auto start = chrono::high_resolution_clock::now();
     
     while (itr_ctr.load() > 0) { // This loop takes 16.8s / 18.1s
       int ik = intRand(0, n - 1);
@@ -123,29 +119,29 @@ void mexFunction(int nlhs, mxArray *plhs[],
       // update iteration counter
       itr_ctr--;
     }
-    auto end = chrono::high_resolution_clock::now();
-    elapsed += (end - start);
-    print_mutex.lock();
-    cout << "elapsed time: " << elapsed.count() << " s\n";
-    print_mutex.unlock();
     
     delete[] delta_z;
   };
-
   
+  chrono :: duration <double > elapsed;
+  auto start = chrono::high_resolution_clock::now();
   vector <thread> threads;
   for (int i = 0; i < num_thread; i++) {
     threads.push_back(thread(iterate));
   }
   for (auto& t: threads) t.join();
-
+  auto end = chrono::high_resolution_clock::now();
+  elapsed = (end - start);
   
   // MATLAB Output 
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
-  double * ptr = mxGetPr(plhs[0]);
-  
+  double * ptr0 = mxGetPr(plhs[0]);
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c].load();
+    ptr0[c] = mean_z[c].load();
+
+  plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
+  double *ptr1 = mxGetPr(plhs[1]);
+  *ptr1 = elapsed.count();
   
   delete [] mean_z;
   delete [] x_a;

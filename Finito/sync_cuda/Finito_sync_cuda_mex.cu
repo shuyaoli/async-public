@@ -9,7 +9,20 @@
 #include <chrono>
 #include "mex.h"
 #include "matrix.h"
+// __device__ double atomic_add(double* address, double val)
+// {
+//   unsigned long long int* address_as_ull =
+//     (unsigned long long int*)address;
+//   unsigned long long int old = *address_as_ull, assumed;
 
+//   do {
+//     assumed = old;
+//     old = atomicCAS(address_as_ull, assumed,
+//                     __double_as_longlong(val +
+//                                          __longlong_as_double(assumed)));
+
+//     // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+//   } while (assumed != old);
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) {      \
       printf("Error at %s:%d\n",__FILE__,__LINE__);     \
       printf("Message: %s\n", cudaGetErrorString(x));   \
@@ -214,8 +227,9 @@ void mexFunction(int nlhs, mxArray *plhs[],
   CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen, seed));
   CURAND_CALL(curandGenerate(gen, d_random_index, n * epoch));
   
-  chrono :: duration <double> elapsed (0);
-  cudaDeviceSynchronize(); auto start = chrono :: high_resolution_clock::now();
+  duration <double> elapsed;
+  cudaDeviceSynchronize();
+  auto start = high_resolution_clock::now();
   
   for (int k = 0; k < epoch * n / NUM_AGENT; k++) {
     memset(delta_mean_z, 0, sizeof(double) * dim);
@@ -252,29 +266,28 @@ void mexFunction(int nlhs, mxArray *plhs[],
     //-------------------------------------------------------------------------------------------
     
   }
-  cudaDeviceSynchronize(); auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
-
-  cout<< endl
-      <<"NUM_AGENT: " << NUM_AGENT << endl
-      <<"BLOCKSIZE: " << BLOCKSIZE << endl
-      <<"elapsed time: "<<elapsed.count()<<" s"<<endl
-      << endl;
+  cudaDeviceSynchronize();
+  auto end = high_resolution_clock::now();
+  elapsed = end - start;
   
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
   CUDA_CALL(cudaMemcpy(z_a, d_z_a, sizeof(double) * dim * n, cudaMemcpyDeviceToHost));
 
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
   plhs[1] = mxCreateDoubleMatrix(1, n * dim, mxREAL);
-
+  plhs[2] = mxCreateDoubleMatrix(1, 1, mxREAL);
   
   double * ptr0 = mxGetPr(plhs[0]);
   double * ptr1 = mxGetPr(plhs[1]);
+  double * ptr2 = mxGetPr(plhs[2]);
   
   for (int c = 0; c < dim; c++)
     ptr0[c] = mean_z[c];
 
   for (int c = 0; c < dim * n; c++)
     ptr1[c] = z_a[c];
+
+  *ptr2 = elapsed.count();
   
   cudaFree(d_z_a);
   cudaFree(d_mean_z);

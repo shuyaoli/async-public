@@ -210,7 +210,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
   for (auto& t: threads) t.join();
   auto end = chrono::high_resolution_clock::now();
   elapsed = end - start;
-  cout << "high_resolution_clock elapsed time: " << elapsed.count() << " s\n";
+
   // MATLAB Output 
   
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
