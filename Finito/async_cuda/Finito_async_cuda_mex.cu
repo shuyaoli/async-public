@@ -22,6 +22,7 @@
 #define WARP_SIZE 32
 
 using namespace std;
+using namespace chrono;
 // void err_chk(cudaError err) {
 //   if (err != cudaSuccess) {
 //     cout << cudaGetErrorString(err) << endl;
@@ -34,7 +35,8 @@ __global__ void run_async(const double* __restrict__ x_a,
                           double* mean_z,
                           curandState* states,
                           int* itr_ptr,
-                          int n, int dim, double alpha, double s, int epoch)
+                          int n, int dim, double alpha, double s, int epoch,
+                          long long seed)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = threadIdx.x % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
@@ -42,7 +44,7 @@ __global__ void run_async(const double* __restrict__ x_a,
   double delta_buffer;
   
   if (lane == 0) {
-    curand_init(0, warpIdx, 0, &states[warpIdx]);
+    curand_init(seed, warpIdx, 0, &states[warpIdx]);
   }
   while (*itr_ptr < epoch * n) {
     int ik;
@@ -110,32 +112,42 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
   curandState *d_states;
   CUDA_CALL(cudaMalloc(&d_states, sizeof(curandState) * NUM_AGENT));
+  auto now_clock = time_point_cast<milliseconds>(system_clock::now());
+  auto seed = now_clock.time_since_epoch().count();
   
-  chrono :: duration <double> elapsed (0);
-  chrono :: high_resolution_clock :: time_point start, end;
+  duration <double> elapsed (0);
+  high_resolution_clock :: time_point start, end;
 
-  cudaDeviceSynchronize();start=chrono::high_resolution_clock::now();
+  cudaDeviceSynchronize();
+  start = high_resolution_clock::now();
+  
   run_async <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
     (d_x_a, d_y, d_z_a, d_mean_z,  d_states, d_itr_ptr,
-     n, dim, alpha, s, epoch);
-  cudaDeviceSynchronize();end=chrono::high_resolution_clock::now();elapsed=end-start;
+     n, dim, alpha, s, epoch, seed);
+  
+  cudaDeviceSynchronize();
+  end = chrono::high_resolution_clock::now();
+  elapsed = end - start;
   
   CUDA_CALL(cudaMemcpy(mean_z, d_mean_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
   
-  cout<< endl
-      <<"NUM_AGENT: " << NUM_AGENT << endl
-      <<"BLOCKSIZE: " << BLOCKSIZE << endl
-      <<"elapsed time: "<<elapsed.count()<<" s"<<endl
-      << endl;
+  // cout<< endl
+  //     <<"NUM_AGENT: " << NUM_AGENT << endl
+  //     <<"BLOCKSIZE: " << BLOCKSIZE << endl
+  //     <<"elapsed time: "<<elapsed.count()<<" s"<<endl
+  //     << endl;
   
   // MATLAB Output
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
-  double * ptr = mxGetPr(plhs[0]);
+  double * ptr0 = mxGetPr(plhs[0]);
   
   for (int c = 0; c < dim; c++)
-    ptr[c] = mean_z[c];
+    ptr0[c] = mean_z[c];
   
-
+  plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
+  double *ptr1 = mxGetPr(plhs[1]);
+  *ptr1 = elapsed.count();
+  
   cudaFree(d_states);
   cudaFree(d_z_a);
   cudaFree(d_mean_z);

@@ -10,7 +10,7 @@ disp('Start calculation');
 
 tic
 
-NUM_AGENT = 1024;
+NUM_AGENT = 512;
 BLOCKSIZE = 128;
 db_trained = Finito_async_cuda_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE);
 

@@ -102,14 +102,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     threads.push_back(thread(iterate, i));
   for (auto& t: threads) t.join();
   auto end = chrono::high_resolution_clock::now(); elapsed += end - start;
-  cout << "high_resolution_clock elapsed time: " << elapsed.count() << " s\n";
 
   
   // MATLAB Output 
   plhs[0] = mxCreateDoubleMatrix(1, dim, mxREAL);
-  double * ptr = mxGetPr(plhs[0]);
+  double * ptr0 = mxGetPr(plhs[0]);
   for (int c = 0; c < dim; c++)
-    ptr[c] = z[c]; 
-  
+    ptr0[c] = z[c]; 
+
+  plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
+  double *ptr1 = mxGetPr(plhs[1]);
+  *ptr1 = elapsed.count();
   delete[] z;
 }

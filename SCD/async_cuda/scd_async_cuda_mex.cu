@@ -118,11 +118,11 @@ void mexFunction(int nlhs, mxArray *plhs[],
  
   cudaDeviceSynchronize();end=chrono::high_resolution_clock::now();elapsed=end-start;
 
-  cout<< endl
-      <<"NUM_AGENT: " << NUM_AGENT << endl
-      <<"BLOCKSIZE: " << BLOCKSIZE << endl
-      <<"elapsed time: "<<elapsed.count()<<" s"<<endl
-      << endl;
+  // cout<< endl
+  //     <<"NUM_AGENT: " << NUM_AGENT << endl
+  //     <<"BLOCKSIZE: " << BLOCKSIZE << endl
+  //     <<"elapsed time: "<<elapsed.count()<<" s"<<endl
+  //     << endl;
 
   CUDA_CALL(cudaMemcpy(z, d_z, sizeof(double) * dim, cudaMemcpyDeviceToHost));
 
@@ -132,6 +132,10 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
   for (int c = 0; c < dim; c++)
     ptr0[c] = z[c];
+  
+  plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
+  double *ptr1 = mxGetPr(plhs[1]);
+  *ptr1 = elapsed.count();
   
   cudaFree(d_x_a);
   cudaFree(d_y);
