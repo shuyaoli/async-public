@@ -10,8 +10,8 @@ err = 0.01;
 rng(seed, 'twister');
 
 %% Generate Data
-n = 4096;
-dim = 4096;
+n = 8192;
+dim = 8192;
 
 [x, y, ~] = generate_dataset(n, dim, err, seed); 
 
@@ -20,8 +20,8 @@ epoch = 64;
 
 s = 0.1;
 
-num_agent = 256;
-blocksize = 256;
+num_agent = 4096;
+blocksize = 128;
 disp('generate data done')
 %% Begin experiments
 %% sync parallel
@@ -56,7 +56,7 @@ disp('generate data done')
 % end
 % cd(cpath);
 
-%% sync cuda
+%% finito sync cuda
 % x_a = x';   
 % x_a = x_a(:);
 % expId = size(records,1) + 1;
@@ -72,7 +72,7 @@ disp('generate data done')
 % end
 % cd(cpath);
 
-%% async cuda
+%% finito async cuda
 % x_a = x';
 % x_a = x_a(:);
 % expId = size(records,1) + 1;
@@ -119,19 +119,19 @@ disp('generate data done')
 % end
 % cd(cpath);
 %% scd sync cuda   
-% x_a = x(:);
-% expId = size(records,1) + 1;
-% 
-% records(expId, :) = {'SCD', 'sync', 'cuda', n, dim, alpha, s, epoch, num_agent, blocksize, zeros(1, epoch), zeros(1, epoch)};
-%     
-% cd('SCD/sync_cuda');
-% mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LINKLIBS='\$LINKLIBS -L/usr/local/cuda/lib64 -lcurand'  scd_sync_cuda_mex.cu
-% for tryout = 1:epoch
-%     [db_trained, calculation_time] = scd_sync_cuda_mex(x_a, y, alpha, s, dim * tryout, num_agent, blocksize, zeros(1, dim));
-%     records{expId, 11}(tryout) = calculation_time;
-%     records{expId, 12}(tryout) = f(db_trained', x, y, s);
-% end
-% cd(cpath);
+x_a = x(:);
+expId = size(records,1) + 1;
+
+records(expId, :) = {'SCD', 'sync', 'cuda', n, dim, alpha, s, epoch, num_agent, blocksize, zeros(1, epoch), zeros(1, epoch)};
+    
+cd('SCD/sync_cuda');
+mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LINKLIBS='\$LINKLIBS -L/usr/local/cuda/lib64 -lcurand'  scd_sync_cuda_mex.cu
+for tryout = 1:epoch
+    [db_trained, calculation_time] = scd_sync_cuda_mex(x_a, y, alpha, s, dim * tryout, num_agent, blocksize, zeros(1, dim));
+    records{expId, 11}(tryout) = calculation_time;
+    records{expId, 12}(tryout) = f(db_trained', x, y, s);
+end
+cd(cpath);
 %% scd async cuda
 x_a = x(:);
 expId = size(records,1) + 1;
