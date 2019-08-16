@@ -1,4 +1,4 @@
-mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_75,code=\"sm_75,compute_75\"' Finito_async_cuda_mex.cu
+mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_30,code=\"sm_30,compute_30\"' Finito_async_cuda_mex.cu
 
 addpath('../../routine_work/');
 
@@ -10,7 +10,7 @@ disp('Start calculation');
 
 tic
 
-NUM_AGENT = 512;
+NUM_AGENT = 256;
 BLOCKSIZE = 128;
 db_trained = Finito_async_cuda_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE);
 

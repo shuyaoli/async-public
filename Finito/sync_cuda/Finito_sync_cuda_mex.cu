@@ -9,20 +9,20 @@
 #include <chrono>
 #include "mex.h"
 #include "matrix.h"
-// __device__ double atomic_add(double* address, double val)
-// {
-//   unsigned long long int* address_as_ull =
-//     (unsigned long long int*)address;
-//   unsigned long long int old = *address_as_ull, assumed;
+__device__ double atomic_add(double* address, double val)
+{
+  unsigned long long int* address_as_ull =
+    (unsigned long long int*)address;
+  unsigned long long int old = *address_as_ull, assumed;
 
-//   do {
-//     assumed = old;
-//     old = atomicCAS(address_as_ull, assumed,
-//                     __double_as_longlong(val +
-//                                          __longlong_as_double(assumed)));
-
-//     // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-//   } while (assumed != old);
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val +
+                                         __longlong_as_double(assumed)));
+  } while (assumed != old);
+  return __longlong_as_double(old);
+}
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) {      \
       printf("Error at %s:%d\n",__FILE__,__LINE__);     \
       printf("Message: %s\n", cudaGetErrorString(x));   \
@@ -109,7 +109,7 @@ __global__ void zUpdate(double* __restrict__ z_a,
     // int cc = (c + warpIdx * 32) % dim;
     // TODO: This gives only 5ms performance gain; I am not sure why it's so small
     
-    atomicAdd(&z_a[ik * dim + c], delta_z[warpIdx * dim + c]); 
+    atomic_add(&z_a[ik * dim + c], delta_z[warpIdx * dim + c]); 
   }
 }
 
@@ -161,7 +161,7 @@ __global__ void reduction_sum_divided(const double* __restrict__ v,
 
     // Add this block's sum to the total sum
     if(threadIdx.x == 0)
-      atomicAdd(sum_v+j, temp);  
+      atomic_add(sum_v+j, temp);  
     // sum_v[j] += temp;
   }
 }
