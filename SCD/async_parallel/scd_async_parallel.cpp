@@ -79,13 +79,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       delta_z *= -alpha / n;
       delta_z += -alpha * s * z[ik];
       
-      for (int r = 0; r < n; r++) {
-        atomic_double_add(dots[r], delta_z * x_a[r + n * ik]);
-      }
-      
       coord_mutex[ik].lock();
       z[ik] += delta_z;
       coord_mutex[ik].unlock();
+
+      for (int r = 0; r < n; r++) {
+        atomic_double_add(dots[r], delta_z * x_a[r + n * ik]);
+      }
     }
     
     // print_mutex.lock();
