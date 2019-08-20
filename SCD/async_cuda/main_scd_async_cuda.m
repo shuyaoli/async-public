@@ -12,7 +12,7 @@ tic
 
 NUM_AGENT = 256;
 BLOCKSIZE = 256;
-db_trained = scd_async_cuda_mex(x_a, y, alpha, s, 40 * dim, NUM_AGENT, BLOCKSIZE, zeros(1, dim));
+db_trained = scd_async_cuda_mex(x_a, y, alpha, s, epoch * dim, NUM_AGENT, BLOCKSIZE, zeros(1, dim));
 
 toc
 

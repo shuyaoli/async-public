@@ -61,6 +61,7 @@ __global__ void run_async(const double* __restrict__ x_a,
   if (lane == 0) {
     curand_init(seed, warpIdx, 0, &states[warpIdx]);
   }
+  
   while (*itr_ptr < epoch * n) {
     int ik;
     if (lane == 0) {
@@ -82,8 +83,8 @@ __global__ void run_async(const double* __restrict__ x_a,
       // TODO: it doesn't work...basically no speed up
       delta_buffer = mean_z[c] - z_a[ik * dim + c] - 
         alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
-      atomic_add(&z_a[ik * dim + c], delta_buffer);
-      atomic_add(&mean_z[c], delta_buffer / n);
+      atomicAdd(&z_a[ik * dim + c], delta_buffer);
+      atomicAdd(&mean_z[c], delta_buffer / n);
     }
   }
 }

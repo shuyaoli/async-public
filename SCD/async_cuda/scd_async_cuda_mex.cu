@@ -75,10 +75,10 @@ __global__ void run_async(const double* __restrict__ x_a,
 
     
     for (int r = lane; r < n; r+=WARP_SIZE)
-      atomic_add(&dots[r], delta_z * x_a[r + ik * n]);
+      atomicAdd(&dots[r], delta_z * x_a[r + ik * n]);
     
     if (lane == 0){
-      atomic_add(&z[ik], delta_z);
+      atomicAdd(&z[ik], delta_z);
     }
 
   }

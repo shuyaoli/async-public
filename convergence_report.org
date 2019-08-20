@@ -1,0 +1,45 @@
+* function value wrt epoch (convergence wrt epoch)
+"Fast" means small number of epochs.
+** When stepsize is small, #processor doesn't matter.
+   
+** As we increase stepsizes, small #processor converges faster in sync algoritm. Async algorithm is less affected by this factor, especially when stepsizes is reasonably small.
+
+** Finito vs SCD:  
+Finito prefers n >> dim; SCD prefers n << dim.
+*** "Prefers" means more rebust (still converges) to large stepsizes and large number of processors
+*** It also means convergence requires less iterations
+
+** Async vs Sync
+** Async algorithms are more robust to large stepsizes and large number of processors
+To the extent that sometimes their sync conterparts don't converge but they do
+
+* function value wrt time
+"Fast"/"performs better" means convergence takes less time
+
+3 settings: n == dim, n >> dim, n << dim
+
+For each setting, control the final value to the precision that there
+are an appropriate number of experiments in each plot.
+
+** *IMPORTANT* notes of computability 
+For Finito sync/async, if we use user-defnied double atomicAdd, then
+async actually runs *slower* than sync. It has to be done with GPU
+with higher computability.
+
+** Finito vs SCD: 
+SCD (only) excels at n << dim
+
+** Async vs Sync
+*** If the requirement for precison is *NOT* demanding, async performs much better than sync
+*** The more n >> dim, the more speedup async enjoys than sync
+*** _PRIMITIVE CONCLUSION_ Async speedup is more distinctive in Finito than SCD
+*** When #processor increases (below a certain point), async gets more rapid speedup than sync.
+*** CUDA
+**** n << dim: both 1.7 speedup
+**** otherwise: finito 1.7x speedup scd: 1.2x speedup 
+*** parallel
+**** n << dim: scd 4.2x speed up; finito 2x speedup
+**** n >> dim: finito 3.6x speed up, scd 4.0x speedup
+**** n == dim: finito 2x speed up, scd 3.6x speedup (varies from 2x to 4.2x depending on precision)
+** CUDA gives 20x - 30x speedup
+Very robust given different cutoff line

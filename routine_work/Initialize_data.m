@@ -2,11 +2,11 @@ seed = 1;
 err = 0.01; 
 rng(seed, 'twister');
 
-n = 4096; 
-dim = 4096; 
+n = 2048; 
+dim = 16384; 
 
-alpha = 1;
-epoch = 64;
+alpha = 4;
+epoch = 128;
 
 s = 0.1; % regularizer
 

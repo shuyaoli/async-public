@@ -5,7 +5,7 @@ addpath('../../routine_work/');
 Initialize_data;
 
 num_pts = 40;
-epochs = [1:num_pts];
+epochs = 1:num_pts;
 times = zeros(1, num_pts);
 function_values = zeros(1, num_pts);
 
