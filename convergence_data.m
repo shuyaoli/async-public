@@ -45,7 +45,7 @@ disp('generate data done')
 for alpha = alphas
         disp(sprintf("alpha = %d", alpha));
         records = finito_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
-        records = scd_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
+%         records = scd_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
         save('records.server.mat', 'records');
 end
 end

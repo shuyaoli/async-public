@@ -13,9 +13,6 @@
 #include <mex.h>
 
 // #define num_T double
-
-
-
 using namespace std;
 
 // typedef double num_T;
@@ -75,7 +72,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
   double* z_a = new double [n * dim] ();
 
   atomic_int itr_ctr(epoch * n); // Tracking iteration
-  mutex* block_mutex = new mutex [n];
+  shared_mutex* block_mutex = new shared_mutex [n];
   // Allocate shared memory for all threads
   atomic <double> *mean_z = new atomic <double> [dim] ();
 
@@ -84,9 +81,15 @@ void mexFunction(int nlhs, mxArray *plhs[],
   auto iterate = [&]() {
     // Allocate local memory for each thread
     double *delta_z = new double [dim];
+    double *old_z_ik = new double [dim];
     
     while (itr_ctr.load() > 0) { // This loop takes 16.8s / 18.1s
       int ik = intRand(0, n - 1);
+
+      block_mutex[ik].lock_shared();
+      for (int c = 0; c < dim; c++)
+        old_z_ik[c] = z_a[ik * dim + c];
+      block_mutex[ik].unlock_shared();
 
       // Calculation for delta_z_ik
       //dot = <old_mean_z, x[ik]>, 1.0s / 18s
@@ -96,13 +99,12 @@ void mexFunction(int nlhs, mxArray *plhs[],
      
       //delta_z = mean_z - z[ik] - alpha * grad_f[ik], 12s / 18s
       for (int c =  0; c < dim; c++) {
-        delta_z[c] = mean_z[c] - z_a[ik * dim + c]
+        delta_z[c] = mean_z[c] - old_z_ik[c]
           - alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[ik * dim + c] + s * mean_z[c]);
         // atomic_double_add(z_a[ik * dim + c], delta_buffer);
         // atomic_double_add(mean_z[c], delta_buffer/n);
       }
       // Now delta_z is delta_z_i
-
 
       // update z[ik], block lock faster than atomic variable
       // z[ik] += delta[z], 0.8s / 18s
@@ -119,7 +121,6 @@ void mexFunction(int nlhs, mxArray *plhs[],
       // update iteration counter
       itr_ctr--;
     }
-    
     delete[] delta_z;
   };
   

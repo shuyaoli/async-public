@@ -1,4 +1,4 @@
-mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LINKLIBS='\$LINKLIBS -L/usr/local/cuda/lib64 -lcurand'  Finito_sync_cuda_mex.cu
+mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_75,code=\"sm_75,compute_75\"' Finito_async_cuda_exclusive_mex.cu
 
 addpath('../../routine_work/');
 
@@ -8,13 +8,12 @@ x_a = x';
 x_a = x_a(:);
 disp('Start calculation');
 
-NUM_AGENT = 512;
+NUM_AGENT = 1024;
 BLOCKSIZE = 128;
-[db_trained, z_a, calculation_time] = Finito_sync_cuda_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE, zeros(1, dim * n), zeros(1, dim));
+[db_trained, calculation_time] = Finito_async_cuda_exclusive_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE);
 
 result = x * db_trained' > 0;
 result = 2 * result - 1;
-
 
 error_rate = 1 - sum(result == y) / size(result,1);
 fprintf('The cost is %.15f\n',f(db_trained', x, y, s));

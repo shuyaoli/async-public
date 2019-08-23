@@ -232,21 +232,34 @@ sync = inf;
 async = inf;
 cut = 0.43264869; %195167411551045
 
-for i = 268:4:281
+for i = 2:4:81
     temp = min(records{i, 11} (records{i,12} < cut));
     if (temp < sync)
         sync = temp;
+        syncid = i;
     end
 end
 
-for i = 269:4:281
+for i = 3:4:81
     
     temp = min(records{i, 11} (records{i,12} < cut)); 
     if (temp < async)
         async = temp;
+        asyncid = i;
     end
 end
 
 
 
-fprintf("async gives %.1fx speed up\n", sync / async) % 22x speed up
+fprintf("async gives %.1fx speed up\n", sync / async) 
+
+
+%% server
+%         for i = [291 317]
+%             plot(1:32,records{i,11}, 'DisplayName', ...
+%             sprintf("%s, #processor: %d", [records{i,1}, '  ', records{i,2}, '  ',records{i,3}], records{i,9}));
+%             hold on
+%         end
+%         legend
+%         title(sprintf("n=%d, dim=%d, alpha=%.1f",records{i,4},records{i,5},records{i,6}))
+%         legend

@@ -21,16 +21,55 @@
 
 #define WARP_SIZE 32
 
-class myMutex {
+class CudaMutex {
 private:
   int _m;
 public:
-  myMutex () {_m = 0;}
+  void init () {_m = 0;};
   __device__ void lock (){
-    while ( atomicExch(&_m, 1) == 1) {}
+    while ( atomicCAS(&_m, 0, 1) != 0) {}
+    // __threadfence();
   };
-  __device__ void unlock() {_m = 0;};
+  __device__ void unlock() {
+    // __threadfence();
+    atomicExch(&_m,0);
+    // _m = 0; WRONG
+  };
 };
+
+class ReaderWriterLock {
+private:
+  CudaMutex ctr_mutex;
+  CudaMutex global_mutex;
+  int b;
+public:
+  ReaderWriterLock () {
+    ctr_mutex.init();
+    global_mutex.init();
+    b = 0;
+  };  
+  __device__ void read_lock() {
+    ctr_mutex.lock();
+    b++;
+    if (b == 1)
+      global_mutex.lock();
+    ctr_mutex.unlock();
+  };
+  __device__ void read_unlock() {
+    ctr_mutex.lock();
+    b--;
+    if (b == 0)
+      global_mutex.unlock();
+    ctr_mutex.unlock();
+  };
+  __device__ void write_lock(){
+    global_mutex.lock();
+  };
+  __device__ void write_unlock(){
+    global_mutex.unlock();
+  };
+};
+
 
 using namespace std;
 using namespace chrono;
@@ -38,17 +77,19 @@ using namespace chrono;
 __global__ void run_async(const double* __restrict__ x_a,
                           const double* __restrict__ y,
                           double* z_a,
+                          double* buffer_z,
                           double* mean_z,
                           curandState* states,
                           int* itr_ptr,
                           int n, int dim, double alpha, double s, int epoch,
-                          long long seed)
+                          long long seed,
+                          ReaderWriterLock* block_mutex)
 {
   const int idx = blockDim.x * blockIdx.x + threadIdx.x;
   const int lane = threadIdx.x % WARP_SIZE; // TODO: threadIdx % WARP_SIZE
   const int warpIdx = idx / WARP_SIZE;
-  double delta_buffer;
-  
+  // double delta_buffer;
+  double temp;
   if (lane == 0) {
     curand_init(seed, warpIdx, 0, &states[warpIdx]);
   }
@@ -64,21 +105,30 @@ __global__ void run_async(const double* __restrict__ x_a,
     double dot = 0;
     for (int c = lane; c < dim; c+=WARP_SIZE) 
       dot += mean_z[c] * x_a[dim * ik + c];
-  
-    __syncwarp();
+
     for (int delta = WARP_SIZE / 2; delta > 0; delta /= 2)
       dot += __shfl_xor_sync(0xffffffff, dot, delta);
 
+    if (lane == 0) block_mutex[ik].read_lock(); __syncwarp();
+    for (int c = lane; c < dim; c += WARP_SIZE) {
+      buffer_z[warpIdx * dim + c] = z_a[ik * dim + c];
+    }
+    if (lane == 0) block_mutex[ik].read_unlock();__syncwarp(); // syncwarp is necessary
+    
     for (int c =  lane; c < dim; c+=WARP_SIZE) {
       // int d = (c + warpIdx * WARP_SIZE) % dim;
       // TODO: it doesn't work...basically no speed up
-      delta_buffer = mean_z[c] - z_a[ik * dim + c] - 
+      temp = mean_z[c] - buffer_z[warpIdx * dim + c] -
         alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
-      atomicAdd(&z_a[ik * dim + c], delta_buffer);
-      atomicAdd(&mean_z[c], delta_buffer / n);
+      atomicAdd(&mean_z[c], temp / n);
+      buffer_z[warpIdx * dim + c] = temp;
     }
 
-    
+    if (lane == 0) block_mutex[ik].write_lock(); __syncwarp();
+    for (int c =  lane; c < dim; c+=WARP_SIZE) {
+      atomicAdd(&z_a[ik * dim + c], buffer_z[warpIdx * dim + c]);
+    }
+    if (lane == 0) block_mutex[ik].write_unlock();__syncwarp(); //syncwarp is necessary
   }
 }
 
@@ -111,6 +161,14 @@ void mexFunction(int nlhs, mxArray *plhs[],
   CUDA_CALL(cudaMemcpy(d_z_a, z_a, sizeof(double) * n * dim, cudaMemcpyHostToDevice));
   CUDA_CALL(cudaMemcpy(d_mean_z, mean_z, sizeof(double) * dim, cudaMemcpyHostToDevice));
 
+  double* d_buffer_z;
+  CUDA_CALL(cudaMalloc(&d_buffer_z, sizeof(double) * dim * NUM_AGENT));
+
+  ReaderWriterLock* block_mutex = new ReaderWriterLock [n] ();
+  ReaderWriterLock* d_block_mutex;
+  CUDA_CALL(cudaMalloc(&d_block_mutex, sizeof(ReaderWriterLock) * n));
+  CUDA_CALL(cudaMemcpy(d_block_mutex, block_mutex, sizeof(ReaderWriterLock) * n, cudaMemcpyHostToDevice));
+  
   int zero = 0;
   int* d_itr_ptr;
   CUDA_CALL(cudaMalloc(&d_itr_ptr, sizeof(int)));
@@ -128,8 +186,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
   start = high_resolution_clock::now();
   
   run_async <<< NUM_AGENT * WARP_SIZE / BLOCKSIZE, BLOCKSIZE>>>
-    (d_x_a, d_y, d_z_a, d_mean_z,  d_states, d_itr_ptr,
-     n, dim, alpha, s, epoch, seed);
+    (d_x_a, d_y, d_z_a, d_buffer_z, d_mean_z,  d_states, d_itr_ptr,
+     n, dim, alpha, s, epoch, seed, d_block_mutex);
   
   cudaDeviceSynchronize();
   end = chrono::high_resolution_clock::now();
