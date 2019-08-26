@@ -1,4 +1,4 @@
-addpath('../routine_work/');
+addpath('../../routine_work/');
 
 Initialize;
 rng('shuffle','twister');

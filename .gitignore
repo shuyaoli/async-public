@@ -7,3 +7,5 @@
 *LARGE*
 *.o
 data/*
+binary_train.mat
+binary_test.mat
