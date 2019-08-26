@@ -74,10 +74,11 @@ __global__ void run_async(const double* __restrict__ x_a,
       // int d = (c + warpIdx * WARP_SIZE) % dim;
       // Doesn't work, basically no speed up.
 
-      // Those could be done with three loops, but then we need to remember the delta_buffer for `dim` different coordinates.
+      // ------------------------------------------------------------------------------------------
+      // Those could be done with three for loops, but then we need to remember the delta_buffer for `dim` different coordinates.
       // Each block has multiple agents (1-32). A typical mimimum is 4 agents, in which case one block has 128 threads.
       // Shared memory is not large enough to store 4 * `dim` * 64 bit when dim is larger than 1500.
-      // It follows that if we use three loops, delta_buffer has to reside in global memory, which is slow.
+      // It follows that if we use three loops, delta_buffer has to reside in global memory, which is very slow.
       delta_buffer = mean_z[c] - z_a[ik * dim + c] - 
         alpha * (-1.0 / (1+exp(y[ik] * dot)) * y[ik] * x_a[dim * ik + c] + s * mean_z[c]);
       atomicAdd(&z_a[ik * dim + c], delta_buffer);
