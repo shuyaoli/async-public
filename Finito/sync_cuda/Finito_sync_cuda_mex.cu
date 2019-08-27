@@ -294,6 +294,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
   cudaFree(d_y);
   cudaFree(d_delta_mean_z);
   cudaFree(d_delta_z);
-
+  cudaFree(d_random_index);
+  
   delete [] delta_mean_z; 
 }

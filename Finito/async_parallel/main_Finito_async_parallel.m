@@ -17,7 +17,7 @@ fprintf('The decision boundary is %.15f, %.15f, %.15f, %.15f, ...\n', db_trained
 
 load binary_test.mat
 
-test_x = [test_x ones(size(test_x, 1), 1)];
+% test_x = [test_x ones(size(test_x, 1), 1)];
 
 result = test_x * db_trained' > 0;
 result = 2 * result - 1;

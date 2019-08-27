@@ -1,5 +1,5 @@
 function records = scd_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath)
-% scd sync parallel
+%% scd sync parallel
 expId = size(records,1) + 1;
 
 records(expId, :) = {'SCD', 'sync', 'parallel', n, dim, alpha, s, epoch, num_thread, [], zeros(1, epoch), zeros(1, epoch)};
@@ -13,7 +13,8 @@ for tryout = 1:epoch
     records{expId, 12}(tryout) = f(db_trained', x, y, s);
 end
 cd(cpath);
-% scd async parallel
+
+%% scd async parallel
 expId = size(records,1) + 1;
 
 

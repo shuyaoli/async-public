@@ -2,7 +2,7 @@ mexcuda NVCCFLAGS='-m64 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LIN
 
 addpath('../../routine_work/');
 
-Initialize;
+Load_Data_and_Initialize;
 
  
 x_a = x(:);
@@ -10,8 +10,8 @@ disp('Start calculation');
 
 tic
 
-NUM_AGENT = 256;
-BLOCKSIZE = 256;
+NUM_AGENT = 16;
+BLOCKSIZE = 128;
 db_trained = scd_async_cuda_mex(x_a, y, alpha, s, epoch * dim, NUM_AGENT, BLOCKSIZE, zeros(1, dim));
 
 toc

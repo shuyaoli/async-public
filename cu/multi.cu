@@ -11,5 +11,9 @@ int main()
   cudaResult = cudaDeviceCanAccessPeer(&canAccessPeer, 1, 0);
   cout << "Query Success: " << (cudaResult == cudaSuccess) << endl;
   cout << "Query Result: " << canAccessPeer << endl;
+
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, 3);
+  cout << prop.unifiedAddressing << endl;
   return 0;
 }

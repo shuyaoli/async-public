@@ -154,7 +154,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
   plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
   double *ptr1 = mxGetPr(plhs[1]);
   *ptr1 = elapsed.count();
-  
+  cudaFree(d_itr_ptr);
   cudaFree(d_states);
   cudaFree(d_z_a);
   cudaFree(d_mean_z);

@@ -228,30 +228,30 @@ load('records.server.mat') % algorithm, n, dim, alpha, s, epoch, p, blocksize, t
 % fprintf("Cuda gives %.1fx speed up\n", parallel / cuda) % 22x speed up
 
 %% 
-sync = inf;
-async = inf;
-cut = 0.43264869; %195167411551045
-
-for i = 2:4:81
-    temp = min(records{i, 11} (records{i,12} < cut));
-    if (temp < sync)
-        sync = temp;
-        syncid = i;
-    end
-end
-
-for i = 3:4:81
-    
-    temp = min(records{i, 11} (records{i,12} < cut)); 
-    if (temp < async)
-        async = temp;
-        asyncid = i;
-    end
-end
-
-
-
-fprintf("async gives %.1fx speed up\n", sync / async) 
+% sync = inf;
+% async = inf;
+% cut = 0.43264869; %195167411551045
+% 
+% for i = 2:4:81
+%     temp = min(records{i, 11} (records{i,12} < cut));
+%     if (temp < sync)
+%         sync = temp;
+%         syncid = i;
+%     end
+% end
+% 
+% for i = 3:4:81
+%     
+%     temp = min(records{i, 11} (records{i,12} < cut)); 
+%     if (temp < async)
+%         async = temp;
+%         asyncid = i;
+%     end
+% end
+% 
+% 
+% 
+% fprintf("async gives %.1fx speed up\n", sync / async) 
 
 
 %% server

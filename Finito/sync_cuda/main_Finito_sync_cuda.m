@@ -2,13 +2,13 @@ mexcuda NVCCFLAGS='-m64 -std=c++11 -gencode=arch=compute_75,code=\"sm_75,compute
 
 addpath('../../routine_work/');
 
-Initialize;
+Load_Data_and_Initialize;
 
 x_a = x';   
 x_a = x_a(:);
 disp('Start calculation');
 
-NUM_AGENT = 512;
+NUM_AGENT = 128;
 BLOCKSIZE = 128;
 [db_trained, z_a, calculation_time] = Finito_sync_cuda_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE, zeros(1, dim * n), zeros(1, dim));
 
