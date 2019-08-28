@@ -32,7 +32,7 @@ SCD (only) excels at n << dim
 ** Async vs Sync
 *** If the requirement for precison is *NOT* demanding, async performs much better than sync
 *** The more n >> dim, the more speedup async enjoys than sync
-*** _PRIMITIVE CONCLUSION_ Async speedup is more distinctive in Finito than SCD
+*** _PRIMITIVE CONCLUSION_ Async CUDA speedup is more distinctive in Finito than SCD
 *** When #processor increases (below a certain point), async gets more rapid speedup than sync.
 *** CUDA
 **** n << dim: both 1.7 speedup

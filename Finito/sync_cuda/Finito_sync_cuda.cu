@@ -62,7 +62,7 @@ __global__ void zCalculate(const double* __restrict__ x_a,
   // One option is to have a single warp access consecutive datapoints
   // (circularly consecutive, so use mod (%) to wrap around) by having
   // only the 0th thread in the warp generate a random index and
-  // sharing it among the threads. This option is implemented
+  // sharing it among the threads. (This option is implemented)
 
   // Another option is to have the 32 threads within a single warp
   // process the same datapoint
