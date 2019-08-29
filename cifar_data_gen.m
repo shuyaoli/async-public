@@ -26,17 +26,17 @@ for alpha = alphas
         for blocksize = blocksizes
             fprintf("alpha = %d, num_agent = %d, blosksize = %d\n", alpha, num_agent,blocksize);
             records = finito_cuda_generate(records, x, y, n, dim, alpha, s, epoch, num_agent, blocksize, COMP, cpath);
-%             records = scd_cuda_generate   (records, x, y, n, dim, alpha, s, epoch, num_agent, blocksize, COMP, cpath);
+            records = scd_cuda_generate   (records, x, y, n, dim, alpha, s, epoch, num_agent, blocksize, COMP, cpath);
             save('cifar.mat', 'records');
         end
     end
 end
 
-% for num_thread = num_threads
-%     for alpha = alphas
-%         fprintf("alpha = %d, num_agent = %d\n", alpha, num_thread);
-%         records = finito_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
-%         records = scd_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
-%         save('cifar.mat', 'records');
-%     end
-% end
+for num_thread = num_threads
+    for alpha = alphas
+        fprintf("alpha = %d, num_agent = %d\n", alpha, num_thread);
+        records = finito_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
+        records = scd_parallel_generate(records, x, y, n, dim, alpha, s, epoch, num_thread, cpath);
+        save('cifar.mat', 'records');
+    end
+end
