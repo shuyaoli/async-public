@@ -1,10 +1,11 @@
-function idx = return_index_helper(records, cut, algorithmQ, syncQ, parallelQ)
+function idx = return_index_helper(records, cut, algorithmQ, syncQ, parallelQ, machineMin, n, dim)
 
     idx = -1;
     shortestTime = Inf;
-    for i = 2:201
-        if strcmp(records{i,1}, algorithmQ) && strcmp(records{i,2}, syncQ) && strcmp(records{i,3}, parallelQ)
-            thisShortestTime= min(records{i,11} (abs(records{i,12} - 0.657181448037133) < cut));
+    for i = 2:size(records,1)
+        if strcmp(records{i,1}, algorithmQ) && strcmp(records{i,2}, syncQ) && strcmp(records{i,3}, parallelQ) ...
+                && records{i, 4} == n && records{i, 5} == dim
+            thisShortestTime= min(records{i,11} (abs(records{i,12} - machineMin) < cut));
             if (thisShortestTime < shortestTime)
                 shortestTime = thisShortestTime;
                 idx = i;
@@ -13,3 +14,4 @@ function idx = return_index_helper(records, cut, algorithmQ, syncQ, parallelQ)
     end
 
 end
+
