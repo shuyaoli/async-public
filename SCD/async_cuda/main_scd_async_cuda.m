@@ -2,7 +2,7 @@ mexcuda NVCCFLAGS='-m64 -gencode=arch=compute_75,code=\"sm_75,compute_75\"'  LIN
 
 addpath('../../routine_work/');
 
-Load_Data_and_Initialize;
+Initialize;
 
  
 x_a = x(:);
