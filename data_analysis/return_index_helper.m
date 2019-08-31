@@ -1,4 +1,4 @@
-function idx = return_index_helper(records, cut, algorithmQ, syncQ, parallelQ, machineMin, n, dim)
+function [idx, shortestTime] = return_index_helper(records, cut, algorithmQ, syncQ, parallelQ, machineMin, n, dim)
 
     idx = -1;
     shortestTime = Inf;

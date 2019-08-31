@@ -13,6 +13,7 @@ Finito prefers n >> dim; SCD prefers n << dim.
 ** Async algorithms are more robust to large stepsizes and large number of processors
 To the extent that sometimes their sync conterparts don't converge but they do
 
+
 * function value wrt time
 "Fast"/"performs better" means convergence takes less time
 
@@ -27,12 +28,17 @@ async actually runs *slower* than sync. It has to be done with GPU
 with higher computability.
 
 ** Finito vs SCD: 
-SCD (only) excels at n << dim
+SCD excels at n << dim;
+Finito excels at n >> dim;
+Their performaces are similar when n == dim;
 
 ** Async vs Sync
-*** If the requirement for precison is *NOT* demanding, async performs much better than sync
-*** The more n >> dim, the more speedup async enjoys than sync
-*** _PRIMITIVE CONCLUSION_ Async CUDA speedup is more distinctive in Finito than SCD
+*** DONE Requirement for precision
+(Not general, sometimes the effect can be reversed) (that's actually
+good news) If the requirement for precison is *NOT* demanding, async
+performs much better than sync
+*** The more n >> dim, the more speedup async enjoys than sync for Finito
+*** DONE (Hard to compare) Async CUDA speedup is more distinctive in Finito than SCD 
 *** When #processor increases (below a certain point), async gets more rapid speedup than sync.
 *** CUDA
 **** n << dim: both 1.7 speedup
@@ -41,5 +47,16 @@ SCD (only) excels at n << dim
 **** n << dim: scd 4.2x speed up; finito 2x speedup
 **** n >> dim: finito 3.6x speed up, scd 4.0x speedup
 **** n == dim: finito 2x speed up, scd 3.6x speedup (varies from 2x to 4.2x depending on precision)
-** CUDA gives 20x - 30x speedup
-Very robust given different cutoff line
+
+
+** CUDA vs CPU
+*** 20-30x for async synthetic
+*** DONE 10-20x for CIFAR (because num_agent can't be set too high...)
+*** 50-60x for sync
+
+
+** TODO
+
+*** Multi GPU
+
+*** Try to get CIFAR-10 more closed to min and see whether this gives flexibility of num_agent
