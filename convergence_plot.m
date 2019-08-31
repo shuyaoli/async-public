@@ -263,10 +263,10 @@ load('records.server.mat') % algorithm, n, dim, alpha, s, epoch, p, blocksize, t
 %         legend
 %         title(sprintf("n=%d, dim=%d, alpha=%.1f",records{i,4},records{i,5},records{i,6}))
 %         legend
-[idxs] = return_index(records,1e-6, 0.195167411551043, 2048, 16384);
+[idxs] = return_index(records,1e-6, 0.432648679303562, 8192, 8192);
         
 figure
-for i = idxs(5:8)
+for i = idxs(1:4)
     if i > 0 
         plot(records{i,11},records{i,12}, 'DisplayName', ...
         sprintf("%s, #agent: %d, stepsize: %.2f", [records{i,1}, '  ', records{i,2}, '  ',records{i,3}], records{i,9}, records{i,6}));
@@ -276,9 +276,11 @@ end
 legend
 xlabel("time(s)")
 ylabel("function value")
-title(sprintf("Synthetic, n=%d, dim=%d",2048,16384));
+title(sprintf("Synthetic, n=%d, dim=%d, CPU Implementation",8192, 8192));
+fig  = gcf;
+fig.Units = 'inches';
+fig.Position = [0 0 10 6];
+% 432648679303562 8192 8192
 
-% 432648679303562
-% 657181448037133
 % 531309702952792
 % 195167411551043
