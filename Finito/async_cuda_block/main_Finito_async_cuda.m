@@ -8,7 +8,7 @@ x_a = x';
 x_a = x_a(:);
 disp('Start calculation');
 
-NUM_AGENT = 1024;
+NUM_AGENT = 64;
 BLOCKSIZE = 128;
 [db_trained, calculation_time] = Finito_async_cuda_mex(x_a, y, alpha, s, epoch, NUM_AGENT, BLOCKSIZE);
 
