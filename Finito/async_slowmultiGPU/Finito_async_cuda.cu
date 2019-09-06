@@ -57,8 +57,7 @@ __global__ void run_async(const double* __restrict__ x_a,
   while (*itr_ptr < epoch * n) {
     int ik;
     if (lane == 0) {
-      if (atomicAdd_system(itr_ptr, 1) % n == 0)
-        
+      atomicAdd_system(itr_ptr, 1);
       ik = curand(&states[warpIdx]) % (n / 2);
     }
     ik = __shfl_sync(0xffffffff, ik, 0);
@@ -131,15 +130,18 @@ int main()
   CUDA_CALL(cudaMalloc(&d_buffer_z, sizeof(double) * dim * NUM_AGENT / 2));
   
   // try to reside on host
-  int* d_itr_ptr;
-  CUDA_CALL(cudaMallocManaged(&d_itr_ptr, sizeof(int)));
-  memset(d_itr_ptr, 0, sizeof(int));
+  int *h_itr_ptr, *d_itr_ptr;
+  CUDA_CALL(cudaMallocAlloc(&h_itr_ptr, sizeof(int), cudaHostAllocMapped));
+  memset(h_itr_ptr, 0, sizeof(int));
+  CUDA_CALL(cudaHostGetDevicePointer(&h_itr_ptr, d_itr_ptr, 0));
 
-  double *d_z_a, *d_mean_z;
-  CUDA_CALL(cudaMallocManaged(&d_z_a, sizeof(double) * n * dim));
-  CUDA_CALL(cudaMallocManaged(&d_mean_z, sizeof(double) * dim));  
-  memset(d_z_a, 0, sizeof(double) * n * dim);
-  memset(d_mean_z, 0, sizeof(double) * dim);
+  double *d_z_a, *d_mean_z, *h_z_a, *h_mean_z;
+  CUDA_CALL(cudaMallocAlloc(&h_z_a, sizeof(double) * n * dim, cudaHostAllocMapped));
+  CUDA_CALL(cudaMallocAlloc(&h_mean_z, sizeof(double) * dim, cudaHostAllocMapped));  
+  memset(h_z_a, 0, sizeof(double) * n * dim);
+  memset(h_mean_z, 0, sizeof(double) * dim);
+  CUDA_CALL(cudaHostGetDevicePointer(&h_z_a, d_z_a, 0));
+  CUDA_CALL(cudaHostGetDevicePointer(&h_mean_z, d_mean_z, 0));
   
   auto now_clock = time_point_cast<milliseconds>(system_clock::now());
   auto seed = now_clock.time_since_epoch().count();

@@ -3,7 +3,7 @@ err = 0.01;
 rng(seed, 'twister');
 
 n = 8192; 
-dim = 8192; 
+dim = 1024; 
 
 alpha = 4;
 epoch = 64;
