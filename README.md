@@ -1,3 +1,6 @@
+This is the repository made available to assist Shuyao Li's graduate school
+application. All rights reserved.
+
 # Environment setup
 TODO
 
