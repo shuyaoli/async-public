@@ -1,16 +1,15 @@
-clear;
-load('records.server.mat') % algorithm, n, dim, alpha, s, epoch, p, blocksize, times, function values
+%clear;
+%load('records.server.mat') % algorithm, n, dim, alpha, s, epoch, p, blocksize, times, function values
 %% server
 % Cutoff value to exclude outliers
 % 0.432648679303562 8192  8192
 % 0.531309702952792 16384 2048
 % 0.195167411551043 2048  16384
-para_n = 2048;
-para_d = 16384;
-cutoff = 0.195167411551043;
+para_n = 8192;
+para_d = 8192;
+cutoff = 0.432648679303562;
 [idxs] = return_index(records,1e-6, cutoff, para_n, para_d);   
 h = figure;
-
 for i = idxs(5:6)
     if i > 0 
         plot(records{i,11},(records{i,12} - cutoff),'DisplayName', ...
@@ -27,14 +26,15 @@ for i = idxs(7:8)
         hold on
     end
 end
-legend('fontsize', 10);
-xlabel("time(s)", 'fontsize',16)
-ylabel("function value suboptimality", 'fontsize',16)
-title(sprintf("plot with normal scale, n=%d, d=%d",para_n, para_d),'fontsize',18);
-fig  = gcf;
+legend('fontsize', 22);
+ax = gca;
+ax.FontSize = 22; 
+xlabel("Time (s)", 'fontsize',28);
+ylabel("Function Suboptimality", 'fontsize',28);
+title(sprintf("Plot with Normal Scale, n=%d, d=%d",para_n, para_d),'fontsize',28);
+fig = gcf;
 fig.Units = 'inches';
 fig.Position = [0 0 10 6];
-
 
 % [idxs, shortestTimes] = return_index(records,1e-6, 0.195167411551043, 2048,16384);
 % for ctr = 1:8
