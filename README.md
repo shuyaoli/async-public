@@ -24,9 +24,9 @@ Solarized dark             |  Solarized Ocean
 ![](figure_for_README/plot_8192_8192.jpg)  |  ![](figure_for_README/plot_2048_16384.jpg)
 
 <p float="left">
-  <img src="/figure_for_README/plot_8192_8192.jpg" width="375" />
-  <img src="/figure_for_README/plot_2048_16384.jpg" width="375" /> 
-  <img src="/figure_for_README/plot_16384_2048.jpg" width="375" />
+  <img src="/figure_for_README/plot_8192_8192.jpg" width="350" />
+  <img src="/figure_for_README/plot_2048_16384.jpg" width="350" /> 
+  <img src="/figure_for_README/plot_16384_2048.jpg" width="350" />
 </p>
 
 <!-- <img style="float: right;" src="figure_for_README/plot_8192_8192.jpg"/> -->
