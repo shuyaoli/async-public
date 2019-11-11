@@ -25,14 +25,22 @@ Plot with Normal Scale     |  Semi-log(y) Plot
 ![](figure_for_README/plot_2048_16384.jpg)|![](figure_for_README/semilogy_2048_16384.jpg)
 ![](figure_for_README/plot_16384_2048.jpg)|![](figure_for_README/semilogy_16384_2048.jpg)
 
-<!-- <img style="float: right;" src="figure_for_README/plot_8192_8192.jpg"/> -->
-<!-- <img style="float: left;" src="figure_for_README/plot_2048_16384.jpg"/> -->
-<!-- ![image alt >](/) -->
-<!-- ![image alt <](/figure_for_README/plot_2048_16384.jpg) -->
-
 # Requirement
+CUDA GPU compute capability 7.x
+
+CUDA 10.0
+
+C++ compiler that supports C++ 17 standards
+
+MATLAB2018a
 
 # Reference
-[1] Liu, Ji, Stephen J. Wright, Christopher Ré, Victor Bittorf, and Srikrishna Sridhar. "An asynchronous parallel stochastic coordinate descent algorithm." The Journal of Machine Learning Research 16, no. 1 (2015): 285-322.
+[1] Defazio, Aaron, and Justin Domke. "Finito: A faster, permutable
+incremental gradient method for big data problems." In International
+Conference on Machine Learning, pp. 1125-1133. 2014.
 
-[2] Defazio et al. "Finito: A faster, permutable incremental gradient method for big data problems" ICML (2014).
+[2] Liu, Ji, Stephen J. Wright, Christopher Ré, Victor Bittorf, and
+Srikrishna Sridhar. "An asynchronous parallel stochastic coordinate
+descent algorithm." The Journal of Machine Learning Research 16, no. 1
+(2015): 285-322.
+
