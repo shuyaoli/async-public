@@ -16,6 +16,10 @@ GPUs. We observed that the asynchronous GPU algorithms were 20--30x
 faster than the asynchronous CPU algorithms, which were 3.6--4x faster
 than the synchronous parallel CPU algorithms.
 
+# Code Structure
+
 # Performance
 
-# 
+# Requirement
+
+# Reference
