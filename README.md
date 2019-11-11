@@ -19,6 +19,7 @@ than the synchronous parallel CPU algorithms.
 # Code Structure
 
 # Performance
+![image alt >](/plot_8192_8192.jpg)
 
 # Requirement
 
