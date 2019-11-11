@@ -19,10 +19,14 @@ than the synchronous parallel CPU algorithms.
 # Code Structure
 
 # Performance
+Solarized dark             |  Solarized Ocean
+:-------------------------:|:-------------------------:
+![](figure_for_README/plot_8192_8192.jpg)  |  ![](figure_for_README/plot_2048_16384.jpg)
+
 <p float="left">
   <img src="/figure_for_README/plot_8192_8192.jpg" width="100" />
   <img src="/figure_for_README/plot_2048_16384.jpg" width="100" /> 
-  <img src="/figure_for_README/plot_16384_2048.jp" width="100" />
+  <img src="/figure_for_README/plot_16384_2048.jpg" width="100" />
 </p>
 
 <!-- <img style="float: right;" src="figure_for_README/plot_8192_8192.jpg"/> -->
