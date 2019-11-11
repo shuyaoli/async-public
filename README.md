@@ -20,6 +20,9 @@ than the synchronous parallel CPU algorithms.
 
 # Performance
 <img style="float: right;" src="figure_for_README/plot_8192_8192.jpg">
+<img style="float: left;" src="figure_for_README/plot_2048_16382.jpg">
+<!-- ![image alt >](/) -->
+<!-- ![image alt <](/figure_for_README/plot_2048_16384.jpg) -->
 
 # Requirement
 
