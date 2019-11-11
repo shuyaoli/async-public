@@ -1,4 +1,4 @@
-# Asynchronous optimization algorithms with GPU
+# Asynchronous Optimization Algorithms with GPU
 As the number of computational cores in CPUs and GPUs increases, so
 does the cost of synchronization in parallel computing, and the need
 for asynchronous algorithms grows. This project studies asynchronous
@@ -19,15 +19,11 @@ than the synchronous parallel CPU algorithms.
 # Code Structure
 
 # Performance
-Solarized dark             |  Solarized Ocean
+Plot with Normal Scale     |  Semi-log(y) Plot
 :-------------------------:|:-------------------------:
-![](figure_for_README/plot_8192_8192.jpg)  |  ![](figure_for_README/plot_2048_16384.jpg)
-
-<p float="left">
-  <img src="/figure_for_README/plot_8192_8192.jpg" width="350" />
-  <img src="/figure_for_README/plot_2048_16384.jpg" width="350" /> 
-  <img src="/figure_for_README/plot_16384_2048.jpg" width="350" />
-</p>
+![](figure_for_README/plot_8192_8192.jpg)|![](figure_for_README/semilogy_8192_8192.jpg)
+![](figure_for_README/plot_2048_16384.jpg)|![](figure_for_README/semilogy_2048_16384.jpg)
+![](figure_for_README/plot_16384_2048.jpg)|![](figure_for_README/semilogy_16384_2048.jpg)
 
 <!-- <img style="float: right;" src="figure_for_README/plot_8192_8192.jpg"/> -->
 <!-- <img style="float: left;" src="figure_for_README/plot_2048_16384.jpg"/> -->
