@@ -19,8 +19,14 @@ than the synchronous parallel CPU algorithms.
 # Code Structure
 
 # Performance
-<img style="float: right;" src="figure_for_README/plot_8192_8192.jpg"/>
-<img style="float: left;" src="figure_for_README/plot_2048_16384.jpg"/>
+<p float="left">
+  <img src="/figure_for_README/plot_8192_8192.jpg" width="100" />
+  <img src="/figure_for_README/plot_2048_16384.jpg" width="100" /> 
+  <img src="/figure_for_README/plot_16384_2048.jp" width="100" />
+</p>
+
+<!-- <img style="float: right;" src="figure_for_README/plot_8192_8192.jpg"/> -->
+<!-- <img style="float: left;" src="figure_for_README/plot_2048_16384.jpg"/> -->
 <!-- ![image alt >](/) -->
 <!-- ![image alt <](/figure_for_README/plot_2048_16384.jpg) -->
 
