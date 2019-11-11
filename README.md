@@ -28,11 +28,11 @@ Plot with Normal Scale     |  Semi-log(y) Plot
 # Requirement
 CUDA GPU compute capability 7.x
 
-CUDA 10.0
+CUDA 10.1
 
 C++ compiler that supports C++ 17 standards
 
-MATLAB2018a
+MATLAB 2018a
 
 # Reference
 [1] Defazio, Aaron, and Justin Domke. "Finito: A faster, permutable
