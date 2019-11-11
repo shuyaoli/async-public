@@ -33,5 +33,6 @@ Plot with Normal Scale     |  Semi-log(y) Plot
 # Requirement
 
 # Reference
-[1] Liu et al. ``An asynchronous parallel stochastic coordinate descent algorithm'' JMLR (2015).
-[2] Defazio et al. ``Finito: A faster, permutable incremental gradient method for big data problems'' ICML (2014).
+[1] Liu, Ji, Stephen J. Wright, Christopher Ré, Victor Bittorf, and Srikrishna Sridhar. "An asynchronous parallel stochastic coordinate descent algorithm." The Journal of Machine Learning Research 16, no. 1 (2015): 285-322.
+
+[2] Defazio et al. "Finito: A faster, permutable incremental gradient method for big data problems" ICML (2014).
