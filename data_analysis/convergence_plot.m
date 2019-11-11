@@ -1,5 +1,58 @@
 clear;
 load('records.server.mat') % algorithm, n, dim, alpha, s, epoch, p, blocksize, times, function values
+%% server
+% Cutoff value to exclude outliers
+% 0.432648679303562 8192  8192
+% 0.531309702952792 16384 2048
+% 0.195167411551043 2048  16384
+para_n = 2048;
+para_d = 16384;
+cutoff = 0.195167411551043;
+[idxs] = return_index(records,1e-6, cutoff, para_n, para_d);   
+h = figure;
+
+for i = idxs(5:6)
+    if i > 0 
+        plot(records{i,11},(records{i,12} - cutoff),'DisplayName', ...
+        sprintf("%6s %5s %s", records{i,1}, records{i,2},"GPU"),...
+        'LineWidth', 3);
+        hold on
+    end
+end
+for i = idxs(7:8)
+    if i > 0 
+        plot(records{i,11},(records{i,12} - cutoff),'--', 'DisplayName', ...
+        sprintf("%5.25s %6s %s", records{i,1}, records{i,2},'GPU'),...
+        'LineWidth', 3);
+        hold on
+    end
+end
+legend('fontsize', 10);
+xlabel("time(s)", 'fontsize',16)
+ylabel("function value suboptimality", 'fontsize',16)
+title(sprintf("plot with normal scale, n=%d, d=%d",para_n, para_d),'fontsize',18);
+fig  = gcf;
+fig.Units = 'inches';
+fig.Position = [0 0 10 6];
+
+
+% [idxs, shortestTimes] = return_index(records,1e-6, 0.195167411551043, 2048,16384);
+% for ctr = 1:8
+%     i = idxs(ctr);
+%     fprintf("Ctr %d: %s %s %s\n", ctr, records{i, 1}, records{i,2}, records{i, 3});
+% end
+
+% fprintf("Finito parallel: async gives %.2f speedup\n", shortestTimes(1) / shortestTimes(2));
+% fprintf("Finito cuda    : async gives %.2f speedup\n", shortestTimes(5) / shortestTimes(6));
+% fprintf("Finito sync    : cuda  gives %.2f speedup\n", shortestTimes(1) / shortestTimes(5));
+% fprintf("Finito async   : cuda  gives %.2f speedup\n", shortestTimes(2) / shortestTimes(6));
+% fprintf('\n')
+% fprintf("SCD parallel: async gives %.2f speedup\n", shortestTimes(3) / shortestTimes(4));
+% fprintf("SCD cuda    : async gives %.2f speedup\n", shortestTimes(7) / shortestTimes(8));
+% fprintf("SCD sync    : cuda  gives %.2f speedup\n", shortestTimes(3) / shortestTimes(7));
+% fprintf("SCD async   : cuda  gives %.2f speedup\n", shortestTimes(4) / shortestTimes(8));
+
+
 %%
 % for ctr = 2:4:261
 %     figure
@@ -252,60 +305,3 @@ load('records.server.mat') % algorithm, n, dim, alpha, s, epoch, p, blocksize, t
 % 
 % 
 % fprintf("async gives %.1fx speed up\n", sync / async) 
-
-
-%% server
-%         for i = [291 317]
-%             plot(1:32,records{i,11}, 'DisplayName', ...
-%             sprintf("%s, #processor: %d", [records{i,1}, '  ', records{i,2}, '  ',records{i,3}], records{i,9}));
-%             hold on
-%         end
-%         legend
-%         title(sprintf("n=%d, dim=%d, alpha=%.1f",records{i,4},records{i,5},records{i,6}))
-%         legend
-
-[idxs] = return_index(records,1e-6, 0.432648679303562, 8192, 8192);   
-h = figure;
-
-for i = idxs(5:6)
-    if i > 0 
-        loglog(records{i,11},(records{i,12}-0.432648679303562),'DisplayName', ...
-        sprintf("%6s %5s %s", records{i,1}, records{i,2},"GPU"),...
-        'LineWidth', 3);
-        hold on
-    end
-end
-for i = idxs(7:8)
-    if i > 0 
-        loglog(records{i,11},(records{i,12}-0.432648679303562),'--', 'DisplayName', ...
-        sprintf("%5.25s %6s %s", records{i,1}, records{i,2},'GPU'),...
-        'LineWidth', 3);
-        hold on
-    end
-end
-legend('fontsize', 10);
-xlabel("time(s)", 'fontsize',16)
-ylabel("function value suboptimality", 'fontsize',16)
-title(sprintf("log-log plot, n=%d, d=%d",8192, 8192),'fontsize',18);
-fig  = gcf;
-fig.Units = 'inches';
-fig.Position = [0 0 10 6];
-% 432648679303562 8192 8192
-% 531309702952792 big small
-% 195167411551043 small big
-
-% [idxs, shortestTimes] = return_index(records,1e-6, 0.195167411551043, 2048,16384);
-% for ctr = 1:8
-%     i = idxs(ctr);
-%     fprintf("Ctr %d: %s %s %s\n", ctr, records{i, 1}, records{i,2}, records{i, 3});
-% end
-
-% fprintf("Finito parallel: async gives %.2f speedup\n", shortestTimes(1) / shortestTimes(2));
-% fprintf("Finito cuda    : async gives %.2f speedup\n", shortestTimes(5) / shortestTimes(6));
-% fprintf("Finito sync    : cuda  gives %.2f speedup\n", shortestTimes(1) / shortestTimes(5));
-% fprintf("Finito async   : cuda  gives %.2f speedup\n", shortestTimes(2) / shortestTimes(6));
-% fprintf('\n')
-% fprintf("SCD parallel: async gives %.2f speedup\n", shortestTimes(3) / shortestTimes(4));
-% fprintf("SCD cuda    : async gives %.2f speedup\n", shortestTimes(7) / shortestTimes(8));
-% fprintf("SCD sync    : cuda  gives %.2f speedup\n", shortestTimes(3) / shortestTimes(7));
-% fprintf("SCD async   : cuda  gives %.2f speedup\n", shortestTimes(4) / shortestTimes(8));
