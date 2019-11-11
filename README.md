@@ -20,7 +20,7 @@ than the synchronous parallel CPU algorithms.
 
 # Performance
 ![image alt >](figure_for_README/plot_8192_8192.jpg)
-
+![image alt <](figure_for_README/plot_2048_16384.jpg)
 # Requirement
 
 # Reference
