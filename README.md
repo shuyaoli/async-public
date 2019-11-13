@@ -19,7 +19,7 @@ CPU algorithms, which were 3.6--4x faster than the synchronous
 parallel CPU algorithms.
 
 # Codes
-Folder [_development_][development/]
+Folder [_development_](development/)
 
 
 # Performance
