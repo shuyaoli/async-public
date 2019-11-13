@@ -19,7 +19,21 @@ CPU algorithms, which were 3.6--4x faster than the synchronous
 parallel CPU algorithms.
 
 # Codes
-Folder [_development_](development/)
+All algorithms are written C++/CUDA C and encapsulated as a MEX file
+to be called by MATLAB.
+
+Folder [_SCD_](SCD/) contains four setups of optimization algorithms
+Stochastic Coordinate Descent. [_sync\_parallel_](SCD/sync_parallel)
+and [_async\_parallel_](SCD/async_parallel) respectively contain
+synchronous parallel and asynchronous parallel setup written in C++ to
+be run on multi-core CPU. [_sync\_cuda_](SCD/sync_cuda) and
+[_async\_cuda_](SCD/async_cuda) respectively contain synchronous and
+asynchronous setup written in CUDA C to be run on GPU.
+
+Folder [_development_](development/) contains simple and abstract
+codes I wrote when I developed more complex codes.
+
+
 
 
 # Performance

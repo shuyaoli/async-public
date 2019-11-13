@@ -1,4 +1,4 @@
-This folder contains simple and abstract codes I wrote when I develop
+This folder contains simple and abstract codes I wrote when I developed
 more complex codes.
 
 [GPU\_synchronization\_primitive](GPU_synchronization_primitive.cpp)
