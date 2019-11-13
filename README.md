@@ -19,8 +19,9 @@ CPU algorithms, which were 3.6--4x faster than the synchronous
 parallel CPU algorithms.
 
 # Codes
-All algorithms are written C++/CUDA C and encapsulated as a MEX file
-to be called by MATLAB.
+All optimization algorithms are written C++/CUDA C and encapsulated as
+a MEX file to be called by MATLAB. The function to be optimized is a
+binary logistic cost function.
 
 Folder [_SCD_](SCD/) contains four setups of optimization algorithms
 Stochastic Coordinate Descent. [_sync\_parallel_](SCD/sync_parallel)

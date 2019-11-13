@@ -24,3 +24,12 @@ all loops.
 
 [reduction\_sum](reduction_sum.cu) utilizes GPU to sum up n arrays of
 dimension d.
+
+[gd\_cuda](gd_cuda/) contains gradient descent written in CUDA.
+
+[least\_square](least_square/) contains single-threaded implementation
+	of Finito solving least square problem.
+
+[single\_threaded](single_threaded/) contains single threaded
+	implementation of Finito solving binary logistic regression
+	problem.
