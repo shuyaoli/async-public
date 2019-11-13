@@ -30,6 +30,14 @@ be run on multi-core CPU. [_sync\_cuda_](SCD/sync_cuda) and
 [_async\_cuda_](SCD/async_cuda) respectively contain synchronous and
 asynchronous setup written in CUDA C to be run on GPU.
 
+Folder [_Finito_](Finito/) contains the same four setups as in _SCD_
+in folder [_sync\_parallel_](Finito/sync_parallel),
+[_async\_parallel_](Finito/async_parallel),
+[_sync\_cuda_](Finito/sync_cuda), and
+[_async\_cuda_](Finito/async_cuda). In addition, it is also exploring
+different ways to implement asynchronous CUDA setup of Finito on
+multi-GPU machines.
+
 Folder [_development_](development/) contains simple and abstract
 codes I wrote when I developed more complex codes.
 
