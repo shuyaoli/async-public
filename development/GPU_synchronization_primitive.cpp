@@ -105,28 +105,3 @@ int main() {
   thread1.join();
   thread2.join();
 }
-// {
-//   atomic <double> f (2.0);
-
-//   thread t1([](atomic <double> &fx) {
-//       double old = fx.load();
-
-//       double desired = old + 1;
-      
-//       while(!fx.compare_exchange_weak(old, desired)) {
-// 	this_thread::sleep_for (chrono::seconds(1));
-// 	desired = old + 1;
-//       }
-//     }, ref(f));
-
-//   thread t2([](atomic <double> &fx) {
-//       fx.store(fx.load()+1);
-//     }, ref(f));
-
-//   t1.join();
-//   t2.join();
-
-
-//   cout << f <<endl;
-//   return 0;
-// }

@@ -11,36 +11,19 @@ using namespace std;
 int main () {
   int num_thread = 3;
   atomic_int thread_counter_sync(0), restart_ctr(0);
-  mutex sync_mutex, print_mutex;
-  condition_variable sync_cv;
-  
-  // auto safe_compare = [&](atomic_int& n, int val, mutex& mtx) {
-  //   { //debugging purpose
-  //     // lock_guard <mutex> lck(print_mutex);
-  //     // cout << this_thread::get_id() << " wanted a lock for compare\n";
-  //   }
+  mutex sync_mutex, print_mutex, restart_mutex;
+  condition_variable sync_cv, restart_cv;
 
-  //   lock_guard <mutex> lck(mtx);
-  //   { //debugging purpose
-  //     // lock_guard <mutex> lck(print_mutex);
-  //     // cout << this_thread::get_id() << " obtain a lock for compare\n";
-  //   }
-  //   return n.load() == val;
-  // };
-  
+   // Setup blueprint of parallel structure
   auto iterate = [&]() {
 
     while (true) {
-      // while (restart_ctr != 0) {} // 
-      
+
       { //debugging purpose
 	lock_guard <mutex> lck(print_mutex);
-	cout << this_thread::get_id() << " start\n";
+	cout << this_thread::get_id() << " start loop\n";
       }
-      std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
-      // do some work
       
-
       sync_mutex.lock();
       int ctr = thread_counter_sync.load();
 	
@@ -56,18 +39,13 @@ int main () {
           lock_guard <mutex> lck(print_mutex);
           cout << this_thread::get_id() << " notify to wake up\n";
         }
-        restart_ctr.store(num_thread - 1);
-        {
-          lock_guard <mutex> lck(print_mutex);
-          cout << this_thread::get_id() <<" set restart_ctr to "
-               << restart_ctr.load() <<endl;
-        }
+
         sync_cv.notify_all();
         sync_mutex.unlock();
       }
       else {
         sync_mutex.unlock();
-  
+ 
         { //debugging purpose
           lock_guard <mutex> lck(print_mutex);
           cout << this_thread::get_id() << " put to sleep at place "
@@ -82,21 +60,49 @@ int main () {
                               cout << this_thread::get_id()<< " wait status "
                                    <<(thread_counter_sync.load())<<endl;
                             }   
-                            return thread_counter_sync.load()==0; // do NOT lock before compare
+                            return thread_counter_sync.load()==0; 
                           });
       
         lck.unlock();
-        restart_ctr--;
         {
           lock_guard <mutex> lck(print_mutex);
           cout << this_thread::get_id() <<" dec restart_ctr to "
                << restart_ctr.load() <<endl;
         }
       }
+
+      restart_mutex.lock();
+      restart_ctr.store((restart_ctr + 1) % num_thread);
+      restart_mutex.unlock();
+      
+      {
+	lock_guard <mutex> lck(print_mutex);
+	cout << this_thread::get_id() <<" set restart_ctr to "
+	     << restart_ctr.load() <<endl;
+      }
+
+      restart_mutex.lock();
+      if (restart_ctr.load()==0) {
+        restart_mutex.unlock();
+        restart_cv.notify_all();
+      }
+      else {
+        restart_mutex.unlock();
+      
+      
+        unique_lock <mutex> restart_lck(restart_mutex);
+        restart_cv.wait(restart_lck, [&restart_ctr]{
+				       return restart_ctr.load() == 0;
+				     });
+        restart_lck.unlock();
+      }
+      
+      //work start here, heavy or not
+      // std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
     }};
 
 
-  
+  // Instantiate the blueprint and run
   vector <thread> threads;
   for (int i = 0; i < num_thread; i++) {
     threads.push_back(thread(iterate));
