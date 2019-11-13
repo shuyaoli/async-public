@@ -3,8 +3,8 @@
 #include <ctime>
 #include <stdio.h>
 #include <cuda.h>
-
-
+/*********This is a workaround to the bug of Nvidia CUDA identified at this page***********/
+/*https://stackoverflow.com/questions/37566987/cuda-atomicadd-for-doubles-definition-error*/
 __device__ double atomic_add(double* address, double val)
 {
     unsigned long long int* address_as_ull =
@@ -17,7 +17,7 @@ __device__ double atomic_add(double* address, double val)
                         __double_as_longlong(val +
                                __longlong_as_double(assumed)));
 
-    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    // Use integer comparison to avoid hang in case of NaN (since NaN != NaN)
     } while (assumed != old);
 
     return __longlong_as_double(old);
@@ -28,40 +28,30 @@ using namespace std;
 #define n 131072 
 #define d 512
 #define WARP_SIZE 32
-#define num_T float
-#define IS_DOUBLE 0
 
-/*********This is a workaround to the bug of Nvidia CUDA identified at this page***********/
-/*https://stackoverflow.com/questions/37566987/cuda-atomicadd-for-doubles-definition-error*/
-
-// typedef float num_T;
-
-__global__ void parallel_sum(const num_T* __restrict__ z, num_T *x_half) {
-  //Holds intermediates in shared memory reduction
+__global__ void parallel_sum(const double* __restrict__ z, double *x) {
+  // Holds intermediates in shared memory reduction
   __syncthreads();
-  __shared__ num_T buffer[1024/WARP_SIZE];
+  __shared__ double buffer[1024/WARP_SIZE];
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   int lane = threadIdx.x % WARP_SIZE;
 
   for (int k=0; k<d; k++) {
     int j = (k + blockIdx.x) % d;
-    //j = k;
-    num_T temp;
+    double temp;
     // All threads in a block of 1024 take an element
     temp = z[i + n*j];
     
-    // All warps in this block (32) compute the sum of all
-    // threads in their warp
+    // All warps in this block (32) compute the sum of all threads in
+    // their warp
     for(int delta = WARP_SIZE/2; delta > 0; delta /= 2)
       temp += __shfl_xor_sync(0xffffffff, temp, delta);
-
 
     // Write all 32 of these partial sums to shared memory
     if(lane == 0)
       buffer[threadIdx.x / WARP_SIZE] = temp;
     
     __syncthreads();
-
 
     // Add the remaining 32 partial sums using a single warp
     if(threadIdx.x < WARP_SIZE) {
@@ -72,12 +62,7 @@ __global__ void parallel_sum(const num_T* __restrict__ z, num_T *x_half) {
 
     // Add this block's sum to the total sum
     if(threadIdx.x == 0)
-# if IS_DOUBLE
-        atomic_add(x_half+j, temp);
-# else
-        atomicAdd(x_half+j, temp);
-#endif
-      // x_half[j] = temp;
+        atomic_add(x+j, temp);
   }
 }
 
@@ -91,30 +76,29 @@ void err_chk(cudaError err) {
 int main() {
 
   
-  num_T* x_half = new num_T[d]();
-  num_T* z = new num_T[d*n];
+  double* x = new double[d]();
+  double* z = new double[d*n];
 
-  // memset(x_half,0,d*sizeof(num_T));
   for (int i = 0; i < n * d; i ++)
     z[i] = i;
 
-  num_T* d_x_half;
-  num_T* d_z;
+  double* d_x;
+  double* d_z;
 
-  err_chk(cudaMalloc(&d_x_half, sizeof(num_T)*d));
-  err_chk(cudaMalloc(&d_z, sizeof(num_T)*n*d));
-  err_chk(cudaMemcpy(d_z, z, sizeof(num_T)*n*d, cudaMemcpyHostToDevice));
-    
-
-  // err_chk(cudaMemcpy(d_x_half, x_half, sizeof(num_T)*d, cudaMemcpyHostToDevice));
+  err_chk(cudaMalloc(&d_x, sizeof(double)*d));
+  err_chk(cudaMalloc(&d_z, sizeof(double)*n*d));
+  err_chk(cudaMemcpy(d_z, z, sizeof(double)*n*d, cudaMemcpyHostToDevice));
                                         
-  parallel_sum <<<n/1024,1024>>> (d_z, d_x_half);
+  parallel_sum <<<n / 1024,1024>>> (d_z, d_x);
 
-  err_chk(cudaMemcpy(x_half, d_x_half, sizeof(num_T)*d, cudaMemcpyDeviceToHost));
+  err_chk(cudaMemcpy(x, d_x, sizeof(double)*d, cudaMemcpyDeviceToHost));
+  
   cudaFree(d_z);
-  cudaFree(d_x_half);
+  cudaFree(d_x);
+  
   for (int i = 0; i < 10; i++)
-    printf("%.1f\n", x_half[i]);
+    printf("%.1f\n", x[i]);
+  
   return 0;
 }
 

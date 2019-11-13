@@ -21,3 +21,6 @@ works **only when** the for loop contains very heavy work but synchronizes
 with one less lock and condition variable, while
 [multithread\_for\_loop-all](multithread_for_loop-all.cpp) works for
 all loops.
+
+[reduction\_sum](reduction_sum.cu) utilizes GPU to sum up n arrays of
+dimension d.
