@@ -1,4 +1,5 @@
 # Asynchronous Optimization Algorithms with GPU
+** Please refer to the poster[poster.pdf] and my presentation[presentation.pdf] for more details.**
 As the number of computational cores in CPUs and GPUs increases, so
 does the cost of synchronization in parallel computing, and the need
 for asynchronous algorithms grows. This project studies asynchronous
@@ -46,6 +47,7 @@ codes I wrote when I developed more complex codes.
 
 
 # Performance
+** Please refer to the poster[poster.pdf] and my presentation[presentation.pdf] for more details.**
 Plot with Normal Scale     |  Semi-log(y) Plot
 :-------------------------:|:-------------------------:
 ![](plots/figure_for_README/plot_8192_8192.jpg)|![](plots/figure_for_README/semilogy_8192_8192.jpg)
